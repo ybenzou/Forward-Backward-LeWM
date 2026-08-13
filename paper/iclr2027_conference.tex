@@ -58,9 +58,9 @@ and $\Ibackward$, trained on detached latents. $\Iforward$ maps the
 short-plan endpoint to a later latent that is compared with the goal;
 $\Ibackward$ maps the goal embedding to an earlier latent that is
 compared with that endpoint. CEM ranks plans by Euclidean distance
-between this pair. On PushT and TwoRoom,
-this raises mid-range success by $28$--$52$ percentage points over
-LeWM.
+between this pair. On PushT, TwoRoom, and Cube, this raises
+mid-range success by $28$--$52$ percentage points over LeWM and
+long-horizon TwoRoom success from $18\%$ to $66\%$.
 \end{abstract}
 
 \section{Introduction}
@@ -100,8 +100,9 @@ main check. Table~\ref{tab:pusht} reports PushT.
 \item $\Iforward$ and $\Ibackward$, trained on detached LeWM latents,
 that align the predicted endpoint and the goal in time and form a
 horizon-matched CEM cost.
-\item On PushT and TwoRoom, this cost raises mid-range success by
-$28$--$52$ percentage points over LeWM. Cube is a third control task.
+\item On PushT, TwoRoom, and Cube, this cost raises mid-range success
+by $28$--$52$ percentage points over LeWM and long-horizon TwoRoom
+success from $18\%$ to $66\%$.
 \end{itemize}
 
 \section{Related work}
