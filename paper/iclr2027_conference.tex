@@ -45,17 +45,20 @@ Address \\
 \maketitle
 
 \begin{abstract}
-LeWorldModel (LeWM) is trained on a short observation window and plans
-with short-horizon Cross-Entropy Method (CEM). Success collapses when
-this CEM is scored against a long-range goal: the planner still emits a
-short action sequence and ranks it by Euclidean distance to a distant
-goal embedding. We introduce FaBLeWM (Forward and Backward LeWM). Two
-action-free imaginers, trained on detached latents, form a
-horizon-matched terminal cost for this CEM. A forward map
-continues from the predicted endpoint. A backward map walks the goal
-back. The LeWM encoder, predictor, and planner are unchanged. On PushT
-and TwoRoom, horizon-matched costs raise mid-range success by
-$28$--$52$ percentage points over LeWM.
+Latent world models plan by scoring imagined rollouts against a goal
+embedding. LeWorldModel (LeWM) trains on a short window of four images
+and uses short-horizon Cross-Entropy Method (CEM) with a Euclidean
+terminal cost. When the goal lies beyond that window, CEM ranks a short
+plan by the distance between a near-term predicted latent and a distant
+$\zg$. Lengthening the predictor, adding hierarchy, or replacing the
+metric leaves that terminal pair untouched. Our key idea is to align
+the two arguments of the Euclidean cost in time. We introduce FaBLeWM
+(Forward and Backward LeWM): two action-free imaginers, $\Iforward$
+and $\Ibackward$, trained on detached latents. $\Iforward$ continues
+from the predicted endpoint; $\Ibackward$ walks the goal back. They
+form a horizon-matched terminal cost for CEM. On PushT and TwoRoom,
+this raises mid-range success by $28$--$52$ percentage points over
+LeWM.
 \end{abstract}
 
 \section{Introduction}
@@ -66,40 +69,37 @@ space~\citep{hafner2019planet,hafner2020dreamer,hansen2022tdmpc}.
 LeWorldModel (LeWM)~\citep{lewm2026} is an action-conditioned
 JEPA~\citep{lecun2022jepa}: an encoder $E$ produces latents, a
 predictor $P$ rolls them forward under actions, and the Cross-Entropy
-Method (CEM)~\citep{rubinstein1999cem} selects a short action sequence
-by terminal Euclidean distance to a goal embedding $\zg$. That cost is the right
-comparison when the goal lies inside one plan. When the goal is $50$,
-$75$, or $100$ steps away, CEM still emits 25-step plans, but it ranks
-them by how close a near-term endpoint sits to a still-distant $\zg$.
-On TwoRoom, LeWM already reaches $90\%$ at offset $25$ and
-then falls to $50/32/18$. The short-horizon controller is not the
-failure; the terminal pair is.
+Method (CEM)~\citep{rubinstein1999cem} selects an action sequence by
+terminal Euclidean distance to a goal embedding $\zg$.
 
-FaBLeWM is a method for that interface. We attach two small
-action-free imaginers, $F$ and $B$, trained on stop-gradient copies of
-LeWM latents, and use them only when the remaining time to the goal
-exceeds one CEM horizon (Figure~\ref{fig:framework}). $F$ continues
-from the predicted endpoint
-$\Pend$; $B$ walks $\zg$ backward. CEM still plans 25 steps and still
-minimizes Euclidean MSE; the two arguments of that MSE are brought
-onto a common horizon. When the goal already fits in one plan, $F$
-and $B$ are skipped and the cost is LeWM's.
+The difficulty is a mismatch of horizons. LeWM trains on a short
+window of four images at a time, while evaluation can place the goal
+far beyond that window. Recent work attacks the resulting drop by
+lengthening the action-conditioned predictor~\citep{du2026vlwm},
+planning at several resolutions or toward predicted
+subgoals~\citep{zhang2026hwm,masip2026ffjepa,cheng2026sage}, or
+replacing Euclidean MSE with a learned metric~\citep{li2026trm}. Those
+changes leave the CEM terminal pair as it is: a near-term predicted
+latent compared with a still-distant $\zg$. Success falls as this gap
+grows.
 
-The contribution is a method, not a new planner and not a longer
-action-conditioned predictor. Table~\ref{tab:tworoom} and
-Figure~\ref{fig:tworoom-success} are the main check: same checkpoint,
-same $50$ starts, same 25-step CEM. Table~\ref{tab:pusht} reports
-PushT.
+We introduce FaBLeWM (Forward and Backward LeWM). The observation is
+that terminal MSE fails when its two arguments are not aligned in
+time. We attach two action-free imaginers on detached LeWM
+latents. $\Iforward$ continues from the predicted endpoint;
+$\Ibackward$ walks $\zg$ back. They bring the pair onto a common
+horizon and form a terminal cost for CEM.
+
+Table~\ref{tab:tworoom} and Figure~\ref{fig:tworoom-success} are the
+main check. Table~\ref{tab:pusht} reports PushT.
 
 \paragraph{Contributions.}
 \begin{itemize}
-\item Detached forward and backward imaginers on LeWM, used
-only to build a horizon-matched CEM cost.
-\item A depth $k=\max((o-t-25)/5,0)$ that reduces to LeWM at
-offset $25$, where the four modes match.
+\item $\Iforward$ and $\Ibackward$, trained on detached LeWM latents,
+that align the predicted endpoint and the goal in time and form a
+horizon-matched CEM cost.
 \item On PushT and TwoRoom, this cost raises mid-range success by
-$28$--$52$ percentage points over LeWM; on TwoRoom at offset $50$,
-Forward saves $21$ LeWM failures and loses one success.
+$28$--$52$ percentage points over LeWM. Cube is a third control task.
 \end{itemize}
 
 \section{Related work}
@@ -140,23 +140,6 @@ $F$ and $B$.
 
 \section{Method}
 \label{sec:method}
-
-Figure~\ref{fig:framework} is the training loop. Pink modules are
-LeWM's encoder $E$ and action-conditioned predictor $P$. The blue
-imaginer is trained on detached latents: forward on $P$'s outputs,
-backward from later encoder states.
-
-\begin{figure}[htbp]
-\begin{center}
-\includegraphics[width=0.98\linewidth]{figures/lewm.png}
-\end{center}
-\caption{FaBLeWM keeps LeWM's $E$ and $P$ (pink). The blue imaginer
-($I$ in the figure) is $F$ in the top panel and $B$ in the bottom:
-forward continues from predicted latents, backward walks encoder
-latents toward the past. CEM still plans a short horizon; only the
-terminal pair of the Euclidean cost changes.}
-\label{fig:framework}
-\end{figure}
 
 \subsection{LeWM}
 \label{sec:lewm}
