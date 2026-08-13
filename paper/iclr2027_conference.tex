@@ -49,14 +49,16 @@ Latent world models plan by scoring imagined rollouts against a goal
 embedding. LeWorldModel (LeWM) trains on a short window of four images
 and uses short-horizon Cross-Entropy Method (CEM) with a Euclidean
 terminal cost. When the goal lies beyond that window, CEM ranks a short
-plan by the distance between a near-term predicted latent and a distant
-$\zg$. Lengthening the predictor, adding hierarchy, or replacing the
+plan by the distance between a near-term predicted latent and the
+embedding of that still-distant goal. Lengthening the predictor, adding hierarchy, or replacing the
 metric leaves that terminal pair untouched. Our key idea is to align
 the two arguments of the Euclidean cost in time. We introduce FaBLeWM
 (Forward and Backward LeWM): two action-free imaginers, $\Iforward$
-and $\Ibackward$, trained on detached latents. $\Iforward$ continues
-from the predicted endpoint; $\Ibackward$ walks the goal back. They
-form a horizon-matched terminal cost for CEM. On PushT and TwoRoom,
+and $\Ibackward$, trained on detached latents. $\Iforward$ maps the
+short-plan endpoint to a later latent that is compared with the goal;
+$\Ibackward$ maps the goal embedding to an earlier latent that is
+compared with that endpoint. CEM ranks plans by Euclidean distance
+between this pair. On PushT and TwoRoom,
 this raises mid-range success by $28$--$52$ percentage points over
 LeWM.
 \end{abstract}
