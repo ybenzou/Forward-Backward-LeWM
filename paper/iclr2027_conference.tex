@@ -45,17 +45,19 @@ Address \\
 \maketitle
 
 \begin{abstract}
-Short-horizon CEM on a latent world model ranks action sequences by
-Euclidean distance between a near-term predicted state and a goal that
-may lie far beyond the plan. We introduce FaBLeWM (Forward and Backward
-LeWM): two action-free imaginers, trained on detached latents, form a
-horizon-matched terminal cost for the same 25-step CEM. A forward map
-continues from the predicted endpoint; a backward map walks the goal
+LeWorldModel (LeWM) is trained on a short observation window and plans
+with short-horizon Cross-Entropy Method (CEM). Success collapses when
+this CEM is scored against a long-range goal: the planner still emits a
+short action sequence and ranks it by Euclidean distance to a distant
+goal embedding. We introduce FaBLeWM (Forward and Backward LeWM). Two
+action-free imaginers, trained on detached latents, form a
+horizon-matched terminal cost for this CEM. A forward map
+continues from the predicted endpoint. A backward map walks the goal
 back. The LeWM encoder, predictor, and planner are unchanged. On
-TwoRoom, Official LeWM falls from $90\%$ success at offset $25$ to
-$50/32/18$ at offsets $50/75/100$; with the forward cost the same CEM
-stays at $90/84/66$. PushT shows a smaller but consistent lift at
-mid-range offsets.
+TwoRoom, LeWM obtains $90\%$ success at offset $25$ and
+$18\%$ at offset $100$. With the forward cost, success at offset
+$100$ is $66\%$. On PushT, Fusion raises offset-$50$ success from
+$44\%$ to $78\%$.
 \end{abstract}
 
 \section{Introduction}
@@ -63,15 +65,15 @@ mid-range offsets.
 
 Latent world models plan by scoring imagined rollouts in representation
 space~\citep{hafner2019planet,hafner2020dreamer,hansen2022tdmpc}.
-LeWorldModel~\citep{lewm2026} is an action-conditioned
+LeWorldModel (LeWM)~\citep{lewm2026} is an action-conditioned
 JEPA~\citep{lecun2022jepa}: an encoder $E$ produces latents, a
-predictor $P$ rolls them forward under actions, and
-CEM~\citep{rubinstein1999cem} selects a 25-step sequence by terminal
-Euclidean distance to a goal embedding $\zg$. That cost is the right
+predictor $P$ rolls them forward under actions, and the Cross-Entropy
+Method (CEM)~\citep{rubinstein1999cem} selects a short action sequence
+by terminal Euclidean distance to a goal embedding $\zg$. That cost is the right
 comparison when the goal lies inside one plan. When the goal is $50$,
 $75$, or $100$ steps away, CEM still emits 25-step plans, but it ranks
 them by how close a near-term endpoint sits to a still-distant $\zg$.
-On TwoRoom, Official LeWM already reaches $90\%$ at offset $25$ and
+On TwoRoom, LeWM already reaches $90\%$ at offset $25$ and
 then falls to $50/32/18$. The short-horizon controller is not the
 failure; the terminal pair is.
 
@@ -82,7 +84,7 @@ exceeds one CEM horizon. $F$ continues from the predicted endpoint
 $\Pend$; $B$ walks $\zg$ backward. CEM still plans 25 steps and still
 minimizes Euclidean MSE; the two arguments of that MSE are brought
 onto a common horizon. When the goal already fits in one plan, $F$
-and $B$ are skipped and the cost is Official LeWM.
+and $B$ are skipped and the cost is LeWM's.
 
 The contribution is a method, not a new planner and not a longer
 action-conditioned predictor. Table~\ref{tab:tworoom} and
@@ -93,13 +95,13 @@ help most at offset $50$; Forward is stronger at $75$ and $100$.
 
 \paragraph{Contributions.}
 \begin{itemize}
-\item Detached forward and backward imaginers on Official LeWM, used
+\item Detached forward and backward imaginers on LeWM, used
 only to build a horizon-matched CEM cost.
-\item A depth $k=\max((o-t-25)/5,0)$ that reduces to Official LeWM at
+\item A depth $k=\max((o-t-25)/5,0)$ that reduces to LeWM at
 offset $25$, where the four modes match.
 \item On TwoRoom, Forward raises success from $50/32/18$ to
 $90/84/66$ at offsets $50/75/100$; a paired count at offset $50$
-saves $21$ Official failures and loses one success.
+saves $21$ LeWM failures and loses one success.
 \end{itemize}
 
 \section{Related work}
@@ -130,7 +132,7 @@ separations~\citep{li2026trm}.
 
 Prior work can therefore lengthen $P$, introduce hierarchy or
 subgoal-conditioned search, or replace the Euclidean metric. It does
-not, in the Official LeWM loop, change \emph{which pair} that metric
+not, in LeWM, change \emph{which pair} that metric
 compares while leaving $E$, $P$, 25-step CEM, and MSE fixed. FaBLeWM
 shows that this interface change is enough for large TwoRoom gains
 (Table~\ref{tab:tworoom}) under that exact loop. The closest cost-side
@@ -141,27 +143,27 @@ $F$ and $B$.
 \section{Method}
 \label{sec:method}
 
-\subsection{Official LeWM}
-\label{sec:official}
+\subsection{LeWM}
+\label{sec:lewm}
 
-We use the official LeWM training path. A window of four encoded
+We follow LeWM's training path. A window of four encoded
 observations $z_{0:3}=E(o_{0:3})$ and the corresponding actions is fed
 to $P$. Prediction targets are the encoder latents. The loss is
 next-embedding MSE plus SIGReg,
 \begin{equation}
-\mathcal{L}_{\mathrm{official}}
+\mathcal{L}_{\mathrm{LeWM}}
 =\underbrace{\|P(z,a)-z_{\mathrm{next}}\|^2}_{\mathrm{pred}}
 +0.09\,\mathcal{L}_{\mathrm{SIGReg}}(z).
 \end{equation}
 At evaluation, CEM always plans $\planlen$ environment steps
-(horizon $5$, receding horizon $5$, action block $5$). Official cost is
+(horizon $5$, receding horizon $5$, action block $5$). The LeWM cost is
 $\|\Pend-\zg\|^2$, where $\Pend$ is the predicted embedding after those
 $25$ steps.
 
 \subsection{Horizon-matched terminal cost}
 \label{sec:imaginers}
 
-The Official cost compares $\Pend$ at time $t{+}25$ to a goal that may
+The LeWM cost compares $\Pend$ at time $t{+}25$ to a goal that may
 be many action-blocks further. FaBLeWM inserts two residual MLPs on a
 single latent, $F$ and $B$, that read stop-gradient copies of $z$ and
 of $P$'s output $p$. Imaginer losses train only $F$ and $B$. With a
@@ -195,7 +197,7 @@ k=\max\bigl((o-t-\planlen)/5,\,0\bigr).
 \end{equation}
 The division by $5$ matches the action block. When $k{=}0$, $F$ and
 $B$ are skipped and $C_F=C_B=\|\Pend-\zg\|^2$. Offset $25$ at the
-first replan has $k{=}0$, so Official, Forward, Backward, and Fusion
+first replan has $k{=}0$, so LeWM, Forward, Backward, and Fusion
 share the same cost.
 
 \paragraph{Fusion.}
@@ -206,7 +208,7 @@ space, and the 25-step horizon are shared by all four modes.
 \label{sec:exp}
 
 We compare four costs on one frozen joint-trained checkpoint per task:
-Official, Forward, Backward, and Fusion ($0.5\,C_F+0.5\,C_B$). Each
+LeWM, Forward, Backward, and Fusion ($0.5\,C_F+0.5\,C_B$). Each
 task uses $n{=}50$ episodes, evaluation seed $42$, shared start
 states, and the epoch-10 weights. CEM horizon is $5$ at every offset
 ($25$ environment steps). Success is the environment criterion.
@@ -228,7 +230,7 @@ offsets $50$ and $75$; Forward is best at $100$.}
 \begin{tabular}{lcccc}
 Mode & 25 & 50 & 75 & 100 \\
 \hline \\
-Official        & 82 & 44 & 22 & 12 \\
+LeWM            & 82 & 44 & 22 & 12 \\
 Forward         & 82 & 62 & 42 & 28 \\
 Backward        & 82 & 70 & 34 & 10 \\
 Fusion          & 82 & 78 & 50 & 18 \\
@@ -244,7 +246,7 @@ encoder BatchNorm sphere ($\Vert z\Vert\approx\sqrt{192}\approx 13.9$).
 \begin{center}
 \includegraphics[width=0.98\linewidth]{figures/fig_pusht_train.png}
 \end{center}
-\caption{PushT: Official loss stays well-behaved, and $F$/$B$ output
+\caption{PushT: LeWM loss stays well-behaved, and $F$/$B$ output
 norms remain near the encoder sphere. Horizon-matched CEM still helps
 on this task (Table~\ref{tab:pusht}).}
 \label{fig:pusht-train}
@@ -255,24 +257,24 @@ on this task (Table~\ref{tab:pusht}).}
 \subsection{TwoRoom}
 \label{sec:tworoom}
 
-Official LeWM is already strong at offset $25$ and collapses once the
+LeWM is already strong at offset $25$ and collapses once the
 goal leaves one CEM horizon; Forward recovers that long-offset regime
 with the same planner (Table~\ref{tab:tworoom},
 Figure~\ref{fig:tworoom-success}). At offset $50$, Forward saves $21$
-Official failures and loses one success on the same starts. Official
+LeWM failures and loses one success on the same starts. LeWM
 and Forward fail the same five episodes at offset $25$. Fusion lies
-between Forward and Official.
+between Forward and LeWM.
 
 \begin{table}[htbp]
 \caption{TwoRoom success (\%). Same $50$ starts and 25-step CEM.
-Official $90\to 50/32/18$ at offsets $25\to 50/75/100$; Forward
+LeWM $90\to 50/32/18$ at offsets $25\to 50/75/100$; Forward
 $90/90/84/66$.}
 \label{tab:tworoom}
 \begin{center}
 \begin{tabular}{lcccc}
 Mode & 25 & 50 & 75 & 100 \\
 \hline \\
-Official        & 90 & 50 & 32 & 18 \\
+LeWM            & 90 & 50 & 32 & 18 \\
 Forward         & 90 & 90 & 84 & 66 \\
 Backward        & 92 & 54 & 40 & 24 \\
 Fusion          & 90 & 76 & 58 & 32 \\
@@ -284,9 +286,9 @@ Fusion          & 90 & 76 & 58 & 32 \\
 \begin{center}
 \includegraphics[width=0.98\linewidth]{figures/fig_tworoom_success.png}
 \end{center}
-\caption{TwoRoom: Official drops as soon as the goal leaves one 25-step
+\caption{TwoRoom: LeWM drops as soon as the goal leaves one 25-step
 plan. Forward, using the same CEM, holds long-offset success. Fusion
-lies between Forward and Official.}
+lies between Forward and LeWM.}
 \label{fig:tworoom-success}
 \end{figure}
 
@@ -315,7 +317,7 @@ improves: the cost is used to rank CEM samples.}
 Results are unary $B\to z$ on two tasks at one checkpoint time. Fusion
 is the best mid-range mix on PushT and worse than Forward on TwoRoom.
 PushT at offset $100$ remains $18\%$ under Fusion. We do not compare
-head-to-head with VLWM, HWM, SAGE, or TRM in this draft; Official LeWM
+head-to-head with VLWM, HWM, SAGE, or TRM in this draft; LeWM
 is the controlled baseline (same $E$, $P$, CEM, starts).
 
 \section{Conclusion}
@@ -324,7 +326,7 @@ is the controlled baseline (same $E$, $P$, CEM, starts).
 FaBLeWM keeps LeWM's encoder, predictor, and 25-step CEM, and attaches
 action-free imaginers so that terminal Euclidean MSE compares
 horizon-matched latents. On TwoRoom that interface change is the
-difference between Official collapse at long offsets and Forward
+difference between LeWM's collapse at long offsets and Forward
 success of $90/84/66$. On PushT the same construction helps at
 mid-range offsets. The working object is the CEM cost pair, not a
 longer planner.
@@ -365,7 +367,7 @@ included with the code release.
 
 CEM uses \texttt{horizon=5}, \texttt{receding=5}, and
 \texttt{action\_block=5}, so one plan is $\planlen$ environment steps.
-Imagination depth is $k=\max((o-t-25)/5,\,0)$. Official cost is
+Imagination depth is $k=\max((o-t-25)/5,\,0)$. The LeWM cost is
 $\|\Pend-\zg\|^2$; Forward is $\|\Fk(\Pend)-\zg\|^2$; unary Backward is
 $\|\Pend-\Bk(\zg)\|^2$; Fusion (avg05) is the mean of the last two.
 When $k{=}0$, Forward and Backward are skipped.
@@ -375,8 +377,8 @@ PushT starts hash:
 TwoRoom starts hash:
 \texttt{55d795562181c8f5eb12def43fb995cedd0d45c909fd1f39e38518155e16ad80}.
 
-On TwoRoom at offset $50$, Forward vs.\ Official on the same $50$
-starts: $21$ episodes saved, $1$ lost. Official and Forward at offset
+On TwoRoom at offset $50$, Forward vs.\ LeWM on the same $50$
+starts: $21$ episodes saved, $1$ lost. LeWM and Forward at offset
 $25$ fail on the same five episodes.
 
 \end{document}
