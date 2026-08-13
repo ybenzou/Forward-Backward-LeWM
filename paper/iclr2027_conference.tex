@@ -1,0 +1,243 @@
+
+\documentclass{article} % For LaTeX2e
+\usepackage{iclr2027_conference,times}
+
+% Optional math commands from https://github.com/goodfeli/dlbook_notation.
+\input{math_commands.tex}
+
+\usepackage{hyperref}
+\usepackage{url}
+
+% Figures/tables only; do not edit iclr2027_conference.sty.
+\usepackage{graphicx}
+\input{macros.tex}
+
+
+\title{FBLeWM: Forward and Backward Latent Imaginers\\
+for Short-Horizon CEM Planning}
+
+% Authors must not appear in the submitted version. They should be hidden
+% as long as the \iclrfinalcopy macro remains commented out below.
+% Non-anonymous submissions will be rejected without review.
+
+\author{Yuan Ben \\
+Institution \\
+Address \\
+\texttt{email}
+}
+
+% The \author macro works with any number of authors. There are two commands
+% used to separate the names and addresses of multiple authors: \And and \AND.
+%
+% Using \And between authors leaves it to \LaTeX{} to determine where to break
+% the lines. Using \AND forces a linebreak at that point. So, if \LaTeX{}
+% puts 3 of 4 authors names on the first line, and the last on the second
+% line, try using \AND instead of \And before the third author name.
+
+\newcommand{\fix}{\marginpar{FIX}}
+\newcommand{\new}{\marginpar{NEW}}
+
+%\iclrfinalcopy % Uncomment for camera-ready version, but NOT for submission.
+\begin{document}
+
+
+\maketitle
+
+\begin{abstract}
+% One paragraph. Locked claim: F/B give a 25-step CEM a longer-range ranking
+% signal; we do not claim calibrated $F^{k}(p)\approx z_{t+k}$.
+\end{abstract}
+
+\section{Introduction}
+\label{sec:intro}
+
+\section{Related work}
+\label{sec:related}
+
+LeWM~\citep{lewm2026} trains an encoder $E$, an action-conditioned predictor $P$, and a CEM planner with next-embedding MSE plus SIGReg. FBLeWM keeps this official path unchanged and adds two detached action-free imaginers.
+
+\section{Method}
+\label{sec:method}
+
+\subsection{Official LeWM (unchanged)}
+\[
+\mathcal{L}_{\mathrm{official}}
+=\underbrace{\|P(z,a)-z_{\mathrm{next}}\|^2}_{\mathrm{pred}}
++0.09\,\mathcal{L}_{\mathrm{SIGReg}}(z).
+\]
+CEM always plans $\planlen$ environment steps.
+
+\subsection{Detached imaginers}
+Forward and Backward read stop-gradient latents. Their losses do not update $E$ or $P$.
+
+\paragraph{Forward.}
+$F(p)\to z$ (unary). At evaluation,
+\[
+C_{F}=\bigl\|\Fk\bigl(P_{25}\bigr)-\zg\bigr\|^2.
+\]
+
+\paragraph{Backward (unary, $B\to z$; figures in this draft).}
+$B(z_{t+1})\to z_t$. At evaluation,
+\[
+C_{B}=\bigl\|P_{25}-\Bk(\zg)\bigr\|^2.
+\]
+
+\paragraph{Backward (conditional, \texttt{now}; TwoRoom v2, not in figures yet).}
+\[
+g\leftarrow B(z_0,g),\qquad
+B(z_0,z_3)\to z_2,\quad
+B(z_0,z_2)\to z_1.
+\]
+
+\paragraph{Imagination depth.}
+\[
+k=\max\bigl((o-t-\planlen)/5,\,0\bigr)
+\quad\text{(goal offset $o$, elapsed $t$, action block $5$).}
+\]
+When $k=0$, $F$ and $B$ are bypassed and the cost matches Official.
+
+\paragraph{Fusion (avg05).}
+$C=0.5\,C_F+0.5\,C_B$.
+
+\section{Experiments}
+\label{sec:exp}
+
+Protocol: $n{=}50$, seed $42$, shared starts within each task, checkpoint at epoch 10, CEM horizon $5$ unless noted. Success is the environment criterion, not latent MSE.
+
+\subsection{PushT}
+\label{sec:pusht}
+
+\begin{table}[t]
+\caption{PushT success (\%). CEM${=}5$ at all offsets. Same 50 starts.
+Checkpoint \texttt{fblewm} (unary $B\to z$).}
+\label{tab:pusht}
+\begin{center}
+\begin{tabular}{lcccc}
+Mode & 25 & 50 & 75 & 100 \\
+\hline \\
+Official        & 82 & 44 & 22 & 12 \\
+Forward         & 82 & 62 & 42 & 28 \\
+Backward        & 82 & 70 & 34 & 10 \\
+Fusion (avg05)  & 82 & 78 & 50 & 18 \\
+\end{tabular}
+\end{center}
+\end{table}
+
+\begin{figure}[t]
+\begin{center}
+\includegraphics[width=\linewidth]{figures/fig_pusht_success.png}
+\end{center}
+\caption{PushT success vs.\ offset. This PNG uses CEM horizon $2$ at offset $25$ (Official $72$, Forward $86$); offsets $50$--$100$ match Table~\ref{tab:pusht}. If the paper protocol is CEM${=}5$ everywhere, quote the table at offset $25$ ($82/82/82/82$), not the bars.}
+\label{fig:pusht-success}
+\end{figure}
+
+\begin{figure}[t]
+\begin{center}
+\includegraphics[width=\linewidth]{figures/fig_pusht_train.png}
+\end{center}
+\caption{PushT validation losses and latent norms. F/B outputs stay near the BatchNorm sphere ($\Vert z\Vert{\approx}\sqrt{192}{\approx}13.9$).}
+\label{fig:pusht-train}
+\end{figure}
+
+\subsection{TwoRoom}
+\label{sec:tworoom}
+
+\begin{table}[t]
+\caption{TwoRoom success (\%). CEM${=}5$ at all offsets. Same 50 starts.
+Checkpoint \texttt{fblewm\_tworoom} (unary $B\to z$).}
+\label{tab:tworoom}
+\begin{center}
+\begin{tabular}{lcccc}
+Mode & 25 & 50 & 75 & 100 \\
+\hline \\
+Official        & 90 & 50 & 32 & 18 \\
+Forward         & 90 & 90 & 84 & 66 \\
+Backward        & 92 & 54 & 40 & 24 \\
+Fusion (avg05)  & 90 & 76 & 58 & 32 \\
+\end{tabular}
+\end{center}
+\end{table}
+
+\begin{figure}[t]
+\begin{center}
+\includegraphics[width=\linewidth]{figures/fig_tworoom_success.png}
+\end{center}
+\caption{TwoRoom success vs.\ offset (CEM${=}5$). Forward recovers long-offset success; Fusion does not beat Forward.}
+\label{fig:tworoom-success}
+\end{figure}
+
+\begin{figure}[t]
+\begin{center}
+\includegraphics[width=\linewidth]{figures/fig_tworoom_train.png}
+\end{center}
+\caption{TwoRoom validation losses and latent norms, including SIGReg warmup at epochs $0$--$1$. After the encoder settles, F/B outputs remain ${\approx}5.6$ vs.\ target ${\approx}13.7$. Planning success in Table~\ref{tab:tworoom} still holds: ranking can survive a scale gap.}
+\label{fig:tworoom-train}
+\end{figure}
+
+\subsection{Cube}
+\label{sec:cube}
+
+\section{Conclusion}
+\label{sec:concl}
+
+\subsection*{AI use statement}
+
+(This section is \textbf{required} and does not count toward the page limit.)
+
+In this work, we used generative AI tools for code assistance and grammar checking.
+We have reviewed all AI-assisted work. We take responsibility for the final content of this work,
+including text, claims or artifacts produced with the aid of generative AI.
+
+See the ICLR 2027 AI Policy for Authors for more details. This statement should
+not be more than 1 page.
+
+\subsection*{Ethics statement}
+
+(This section is \textbf{recommended} and does not count toward the page limit.)
+
+If authors feel that their paper submission raises questions regarding the Code
+of Ethics, they are encouraged to include a paragraph of Ethics Statement (at
+the end of the main text before references) to address potential concerns where
+appropriate. Topics include, but are not limited to, studies that involve human
+subjects, practices to data set releases, potentially harmful insights,
+methodologies and applications, potential conflicts of interest and sponsorship,
+discrimination/bias/fairness concerns, privacy and security issues, legal
+compliance, and research integrity issues (e.g., IRB, documentation, research
+ethics). This statement should not be more than 1 page.
+
+\subsection*{Reproducibility statement}
+
+(This section is \textbf{recommended} and does not count toward the page limit.)
+
+It is important that the work published in ICLR is reproducible. Authors are
+strongly encouraged to include a paragraph-long Reproducibility Statement at the
+end of the main text (before references) to discuss the efforts that have been
+made to ensure reproducibility. This paragraph should not itself describe
+details needed for reproducing the results, but rather reference the parts of
+the main paper, appendix, and supplemental materials that will help with
+reproducibility. For example, for novel models or algorithms, a link to an
+anonymous downloadable source code can be submitted as supplementary materials;
+for theoretical results, clear explanations of any assumptions and a complete
+proof of the claims can be included in the appendix; for any datasets used in
+the experiments, a complete description of the data processing steps can be
+provided in the supplementary materials. Each of the above are examples of
+things that can be referenced in the reproducibility statement.
+
+\subsubsection*{Author Contributions}
+If you'd like to, you may include  a section for author contributions as is done
+in many journals. This is optional and at the discretion of the authors.
+
+\subsubsection*{Acknowledgments}
+Use unnumbered third level headings for the acknowledgments. All
+acknowledgments, including those to funding agencies, go at the end of the paper.
+
+
+\bibliography{iclr2027_conference}
+\bibliographystyle{iclr2027_conference}
+
+\appendix
+\section{Appendix}
+You may include other additional sections here.
+
+
+\end{document}

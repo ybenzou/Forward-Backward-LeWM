@@ -1,38 +1,20 @@
-# FBLeWM paper — ICLR 2027
+# FBLeWM paper — ICLR 2027 official shell
 
-Official style files from
-[iclr-2027-style-files.zip](https://media.iclr.cc/Conferences/ICLR2027/iclr-2027-style-files.zip).
-Do not edit `iclr2027_conference.sty`.
+Write **only** in `iclr2027_conference.tex`. That file is the official template shell
+(`iclr2027_conference.sty` / `.bst` / `math_commands.tex` are untouched).
 
-| Date | Item |
+`main.tex` only `\input`s the shell so Overleaf’s default name still compiles.
+
+| File | Role |
 |------|------|
-| 18 Sep 2026 AOE | Abstract deadline (author list locked) |
-| 25 Sep 2026 AOE | Full paper (9 pages main text) |
-| | References, AI statement, ethics, reproducibility, appendix: unlimited |
+| `iclr2027_conference.sty` | Official, do not edit |
+| `iclr2027_conference.bst` | Official, do not edit |
+| `iclr2027_conference.tex` | **Write here** |
+| `iclr2027_conference.bib` | Official sample refs + LeWM |
+| `math_commands.tex` | Official |
+| `macros.tex` | Our notation only (`\Fk`, `\planlen`, …) |
+| `main.tex` | `\input{iclr2027_conference}` |
 
-Submission is **double-blind**. Keep `\iclrfinalcopy` commented until camera-ready.
+`%\iclrfinalcopy` stays commented until camera-ready.
 
-Compile `main.tex` on Overleaf (not `iclr2027_official_sample.tex`).
-
-```bash
-cd /home/yuanben/WorldModel/FBLeWM/paper
-# Overleaf: pdflatex + bibtex
-pdflatex main.tex && bibtex main && pdflatex main.tex && pdflatex main.tex
-```
-
-Number lookup: `../outputs/figures/FIGURES.md`.
-
-## Overleaf git
-
-```bash
-cd /home/yuanben/WorldModel/FBLeWM/paper
-git add -A
-git commit -m "Switch to ICLR 2027 template"
-git remote add overleaf https://git.overleaf.com/<PROJECT_ID>
-git push -u overleaf master
-```
-
-## Locked claim
-
-F/B supply long-range ranking for a 25-step CEM. Do not claim \(F^k(p)\approx z_{t+k}\).
-PushT success PNG is CEM=2 at offset 25; main tables are CEM=5.
+Overleaf: main document `main.tex` or `iclr2027_conference.tex`.

@@ -16,5 +16,6 @@
 *.run.xml
 *.pdf
 !figures/*.pdf
+*.zip
 iclr2027_official_sample.tex
 .DS_Store
