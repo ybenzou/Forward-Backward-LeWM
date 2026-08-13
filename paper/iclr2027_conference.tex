@@ -47,64 +47,73 @@ Address \\
 \begin{abstract}
 Latent world models plan by scoring imagined rollouts against a goal
 embedding. LeWorldModel (LeWM) trains on a short window of four images
-and uses short-horizon Cross-Entropy Method (CEM) with a Euclidean
-terminal cost. When the goal lies beyond that window, CEM ranks a short
-plan by the distance between a near-term predicted latent and the
-embedding of that still-distant goal. Lengthening the predictor, adding hierarchy, or replacing the
-metric leaves that terminal pair untouched. Our key idea is to align
+and uses the short-horizon Cross-Entropy Method (CEM) with a Euclidean
+terminal cost. When the goal lies beyond one planning horizon, this
+cost compares a near-term predicted latent with the embedding of a
+still-distant goal. Existing approaches modify the predictor, planning
+hierarchy, or distance metric. We study a complementary intervention:
+addressing this temporal mismatch under a fixed short-horizon planner.
+Our key idea is to align
 the two arguments of the Euclidean cost in time. We introduce FaBLeWM
-(Forward and Backward LeWM): two action-free imaginers, $\Iforward$
-and $\Ibackward$, trained on detached latents. $\Iforward$ maps the
-short-plan endpoint to a later latent that is compared with the goal;
-$\Ibackward$ maps the goal embedding to an earlier latent that is
-compared with that endpoint. CEM ranks plans by Euclidean distance
-between this pair. On PushT, TwoRoom, and Cube, this raises
-mid-range success by $28$--$52\%$ over LeWM and
-long-horizon TwoRoom success from $18\%$ to $66\%$.
+(Forward and Backward LeWM), which trains two action-free imaginers,
+$\Iforward$ and $\Ibackward$, on detached latents. $\Iforward$ maps the
+short-plan endpoint toward the goal horizon, whereas $\Ibackward$ maps
+the goal embedding toward the endpoint horizon. These transformations
+yield horizon-matched terminal costs while leaving the encoder,
+action-conditioned predictor, and CEM unchanged. On PushT and TwoRoom,
+FaBLeWM improves mid-range success by $28$--$52$ percentage points over
+LeWM and raises long-horizon TwoRoom success from $18\%$ to $66\%$.
 \end{abstract}
 
 \section{Introduction}
 \label{sec:intro}
 
-Latent world models plan by scoring imagined rollouts in representation
+Latent world models enable goal-conditioned control by scoring imagined
+rollouts in representation
 space~\citep{hafner2019planet,hafner2020dreamer,hansen2022tdmpc}.
-LeWorldModel (LeWM)~\citep{lewm2026} is an action-conditioned
-Joint-Embedding Predictive Architecture
-(JEPA)~\citep{lecun2022jepa}: an encoder $E$ produces latents, a
-predictor $P$ rolls them forward under actions, and the Cross-Entropy
-Method (CEM)~\citep{rubinstein1999cem} selects an action sequence by
-terminal Euclidean distance to a goal embedding $\zg$.
+LeWorldModel (LeWM)~\citep{lewm2026} implements this approach with an
+action-conditioned Joint-Embedding Predictive Architecture
+(JEPA)~\citep{lecun2022jepa}: an encoder $E$ produces latent
+representations, a predictor $P$ rolls them forward under candidate
+actions, and the Cross-Entropy Method (CEM)~\citep{rubinstein1999cem}
+selects an action sequence using terminal Euclidean distance to a goal
+embedding $\zg$.
 
-The difficulty is not short-horizon control itself. When the goal
-already lies inside one short plan, LeWM is strong. It appears when
-evaluation places the goal beyond the four-image training window: CEM
-still emits a short plan, and the Euclidean cost compares a near-term
-predicted latent with a still-distant $\zg$. Recent work attacks the
-resulting drop by lengthening the action-conditioned
+This terminal cost becomes problematic when the goal lies beyond one
+planning horizon. LeWM performs well when the goal is reachable within
+a short plan, but at longer offsets CEM must rank short plans by
+comparing a near-term predicted latent with a still-distant $\zg$.
+Recent work addresses long-horizon planning by lengthening the
+action-conditioned
 predictor~\citep{du2026vlwm}, planning at several resolutions or toward
 predicted
 subgoals~\citep{zhang2026hwm,masip2026ffjepa,cheng2026sage}, or
-replacing Euclidean MSE with a learned metric~\citep{li2026trm}. Those
-changes leave this terminal pair as it is.
+replacing Euclidean MSE with a learned metric~\citep{li2026trm}. These
+approaches modify the predictive horizon, planning hierarchy, or
+scoring function. We instead ask whether a fixed short-horizon planner
+can be improved by temporally aligning the two representations supplied
+to its terminal cost.
 
 We introduce FaBLeWM (Forward and Backward LeWM). Two small
-action-free imaginers sit on detached copies of LeWM latents, so
-imaginer losses do not update $E$ or $P$. At planning time we keep the
-same CEM and the same short plans: $\Iforward$ and $\Ibackward$ only
-rewrite the two arguments of the Euclidean cost, one from the predicted
-endpoint and one from $\zg$.
+action-free imaginers operate on detached LeWM latents, so their losses
+do not update $E$ or $P$. At planning time, $\Iforward$ maps the
+predicted endpoint toward the goal horizon, while $\Ibackward$ maps
+$\zg$ toward the endpoint horizon. The resulting forward and backward
+costs can be used separately or averaged. FaBLeWM therefore changes
+only the arguments of the Euclidean terminal cost while retaining the
+same encoder, action-conditioned predictor, short plans, and CEM.
 
 This paper makes three contributions.
 \begin{enumerate}
-\item \textbf{FaBLeWM.} We propose $\Iforward$ and $\Ibackward$, two
-action-free imaginers trained on detached LeWM latents, as a
-time-aligned Euclidean terminal cost for short-horizon CEM.
-\item \textbf{Cross-task gains.} On PushT, TwoRoom, and Cube,
-mid-range success rises by $28$--$52\%$ over LeWM; on TwoRoom,
-long-horizon success rises from $18\%$ to $66\%$.
-\item \textbf{Horizon-matched terminal arguments.} Euclidean CEM
-scores a predicted endpoint against a goal embedding only after both
-are mapped to one remaining time.
+\item \textbf{Problem formulation.} We identify temporal mismatch
+between the predicted endpoint and goal embedding as a failure mode of
+Euclidean terminal costs in short-horizon latent planning.
+\item \textbf{Horizon-matched terminal costs.} We introduce FaBLeWM,
+which uses forward and backward action-free imaginers to align the
+terminal-cost arguments without updating LeWM's encoder or predictor.
+\item \textbf{Empirical evaluation.} On PushT and TwoRoom, FaBLeWM
+improves mid-range success by $28$--$52$ percentage points over LeWM;
+on TwoRoom, it raises long-horizon success from $18\%$ to $66\%$.
 \end{enumerate}
 
 \section{Related work}
