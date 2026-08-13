@@ -53,11 +53,9 @@ goal embedding. We introduce FaBLeWM (Forward and Backward LeWM). Two
 action-free imaginers, trained on detached latents, form a
 horizon-matched terminal cost for this CEM. A forward map
 continues from the predicted endpoint. A backward map walks the goal
-back. The LeWM encoder, predictor, and planner are unchanged. On
-TwoRoom, LeWM obtains $90\%$ success at offset $25$ and
-$18\%$ at offset $100$. With the forward cost, success at offset
-$100$ is $66\%$. On PushT, Fusion raises offset-$50$ success from
-$44\%$ to $78\%$.
+back. The LeWM encoder, predictor, and planner are unchanged. On PushT
+and TwoRoom, horizon-matched costs raise mid-range success by
+$28$--$52$ percentage points over LeWM.
 \end{abstract}
 
 \section{Introduction}
@@ -89,9 +87,8 @@ and $B$ are skipped and the cost is LeWM's.
 The contribution is a method, not a new planner and not a longer
 action-conditioned predictor. Table~\ref{tab:tworoom} and
 Figure~\ref{fig:tworoom-success} are the main check: same checkpoint,
-same $50$ starts, same 25-step CEM, longer-offset success. On PushT
-(Table~\ref{tab:pusht}) Backward and a uniform mix of $C_F$ and $C_B$
-help most at offset $50$; Forward is stronger at $75$ and $100$.
+same $50$ starts, same 25-step CEM. Table~\ref{tab:pusht} reports
+PushT.
 
 \paragraph{Contributions.}
 \begin{itemize}
@@ -99,9 +96,9 @@ help most at offset $50$; Forward is stronger at $75$ and $100$.
 only to build a horizon-matched CEM cost.
 \item A depth $k=\max((o-t-25)/5,0)$ that reduces to LeWM at
 offset $25$, where the four modes match.
-\item On TwoRoom, Forward raises success from $50/32/18$ to
-$90/84/66$ at offsets $50/75/100$; a paired count at offset $50$
-saves $21$ LeWM failures and loses one success.
+\item On PushT and TwoRoom, this cost raises mid-range success by
+$28$--$52$ percentage points over LeWM; on TwoRoom at offset $50$,
+Forward saves $21$ LeWM failures and loses one success.
 \end{itemize}
 
 \section{Related work}
