@@ -1,0 +1,11 @@
+# Install inside conda env `lewm` (Python 3.10+; this machine has 3.11):
+#   pip install -r scripts/requirements-fblewm.txt
+# [format] pulls h5py + hdf5plugin so .h5 autodetection/convert works.
+stable-worldmodel[train,env,format]
+huggingface_hub
+hf_transfer
+rich
+tqdm
+zstandard
+hdf5plugin
+pytest

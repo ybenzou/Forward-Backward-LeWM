@@ -1,0 +1,10 @@
+.stable-wm/
+.cache/
+logs/
+outputs/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.hydra/
+*.egg-info/
+.DS_Store

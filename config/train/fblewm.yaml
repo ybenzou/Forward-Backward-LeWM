@@ -1,0 +1,64 @@
+defaults:
+  - _self_
+  - launcher: local
+  - data: pusht
+  - model: fblewm
+
+# New joint-train run name (B targets Predictor latents).
+# Keeps legacy checkpoints under `fblewm/` untouched.
+output_model_name: fblewm_bp
+subdir: ${hydra:job.id}
+
+num_workers: 6
+train_split: 0.9
+seed: 3072
+img_size: 224
+embed_dim: 192
+history_size: 3
+
+trainer:
+  max_epochs: 100
+  devices: auto
+  accelerator: gpu
+  precision: bf16
+  gradient_clip_val: 1.0
+
+loader:
+  batch_size: 128
+  num_workers: ${num_workers}
+  persistent_workers: True
+  prefetch_factor: 3
+  pin_memory: True
+
+optimizer:
+  type: AdamW
+  lr: 5e-5
+  weight_decay: 1e-3
+
+num_preds: 1
+
+loss:
+  sigreg:
+    weight: 0.09
+    kwargs:
+      knots: 17
+      num_proj: 1024
+  # Imaginer weights (explicit, not hidden).
+  forward:
+    weight: 1.0
+    roll_weight: 1.0
+  backward:
+    weight: 1.0
+    roll_weight: 1.0
+    # pred: unary B(z_{t+1}) -> p_t
+    # encoder: unary B(z_{t+1}) -> z_t
+    # now: conditional g <- B(z0, g) in z-space (swaps in ConditionalLatentImaginer)
+    target: pred
+
+wandb:
+  enabled: false
+  config:
+    entity: null
+    project: fblewm-bp-pusht
+    name: null
+    offline: true
