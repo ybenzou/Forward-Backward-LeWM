@@ -52,17 +52,17 @@ terminal cost. When the goal lies beyond one planning horizon, this
 cost compares a near-term predicted latent with the embedding of a
 still-distant goal. Existing approaches modify the predictor, planning
 hierarchy, or distance metric. We study a complementary intervention:
-addressing this temporal mismatch under a fixed short-horizon planner.
-Our key idea is to align
+addressing temporal mismatch in short-horizon terminal scoring. Our key
+idea is to align
 the two arguments of the Euclidean cost in time. We introduce FaBLeWM
 (Forward and Backward LeWM), which trains two action-free imaginers,
 $\Iforward$ and $\Ibackward$, on detached latents. $\Iforward$ maps the
 short-plan endpoint toward the goal horizon, whereas $\Ibackward$ maps
 the goal embedding toward the endpoint horizon. These transformations
-yield horizon-matched terminal costs while leaving the encoder,
-action-conditioned predictor, and CEM unchanged. On PushT and TwoRoom,
-FaBLeWM improves mid-range success by $28$--$52$ percentage points over
-LeWM and raises long-horizon TwoRoom success from $18\%$ to $66\%$.
+yield terminal costs defined between temporally matched
+representations. On PushT and TwoRoom, FaBLeWM improves mid-range
+success by $28$--$52$ percentage points over LeWM and raises
+long-horizon TwoRoom success from $18\%$ to $66\%$.
 \end{abstract}
 
 \section{Introduction}
@@ -90,18 +90,18 @@ predicted
 subgoals~\citep{zhang2026hwm,masip2026ffjepa,cheng2026sage}, or
 replacing Euclidean MSE with a learned metric~\citep{li2026trm}. These
 approaches modify the predictive horizon, planning hierarchy, or
-scoring function. We instead ask whether a fixed short-horizon planner
-can be improved by temporally aligning the two representations supplied
-to its terminal cost.
+scoring function. We instead study the temporal semantics of terminal
+scoring: how should a planner compare a near-term predicted endpoint
+with a goal representation from a later stage of the trajectory?
 
 We introduce FaBLeWM (Forward and Backward LeWM). Two small
-action-free imaginers operate on detached LeWM latents, so their losses
-do not update $E$ or $P$. At planning time, $\Iforward$ maps the
-predicted endpoint toward the goal horizon, while $\Ibackward$ maps
-$\zg$ toward the endpoint horizon. The resulting forward and backward
-costs can be used separately or averaged. FaBLeWM therefore changes
-only the arguments of the Euclidean terminal cost while retaining the
-same encoder, action-conditioned predictor, short plans, and CEM.
+action-free imaginers learn complementary temporal transformations in
+latent space. At planning time, $\Iforward$ maps the predicted endpoint
+toward the goal horizon, while $\Ibackward$ maps $\zg$ toward the
+endpoint horizon. The resulting forward and backward costs can be used
+separately or averaged. In both directions, candidate plans are scored
+between representations at a matched temporal horizon rather than
+between different stages of the trajectory.
 
 This paper makes three contributions.
 \begin{enumerate}
@@ -110,7 +110,7 @@ between the predicted endpoint and goal embedding as a failure mode of
 Euclidean terminal costs in short-horizon latent planning.
 \item \textbf{Horizon-matched terminal costs.} We introduce FaBLeWM,
 which uses forward and backward action-free imaginers to align the
-terminal-cost arguments without updating LeWM's encoder or predictor.
+terminal-cost arguments in latent space.
 \item \textbf{Empirical evaluation.} On PushT and TwoRoom, FaBLeWM
 improves mid-range success by $28$--$52$ percentage points over LeWM;
 on TwoRoom, it raises long-horizon success from $18\%$ to $66\%$.
@@ -142,15 +142,15 @@ trajectory reachability metrics (TRM) replace or mix terminal MSE with
 a pairwise head trained on horizon-matched temporal
 separations~\citep{li2026trm}.
 
-Prior work can therefore lengthen $P$, introduce hierarchy or
-subgoal-conditioned search, or replace the Euclidean metric. It does
-not, in LeWM, change \emph{which pair} that metric
-compares while leaving $E$, $P$, 25-step CEM, and MSE fixed. FaBLeWM
-shows that this interface change is enough for large TwoRoom gains
-(Table~\ref{tab:tworoom}) under that exact loop. The closest cost-side
-paper is TRM: both treat ranking as the fragile step. TRM learns a new
-scalar; we keep MSE and map $\Pend$ and $\zg$ to a shared horizon with
-$F$ and $B$.
+Prior work can therefore lengthen $P$, introduce hierarchical or
+subgoal-conditioned search, or learn a new distance metric. FaBLeWM
+instead formulates terminal scoring as a temporal correspondence
+problem: before evaluating distance, $F$ advances $\Pend$ and $B$
+rewinds $\zg$ so that the compared representations refer to a shared
+horizon. The closest cost-side method is TRM: both identify candidate
+ranking as a source of long-horizon failure, but TRM learns a scalar
+reachability metric, whereas FaBLeWM constructs temporally matched
+representations for latent-space scoring.
 
 \section{Method}
 \label{sec:method}
@@ -273,7 +273,7 @@ on this task (Table~\ref{tab:pusht}).}
 
 LeWM is already strong at offset $25$ and collapses once the
 goal leaves one CEM horizon; Forward recovers that long-offset regime
-with the same planner (Table~\ref{tab:tworoom},
+by aligning the terminal-cost horizon (Table~\ref{tab:tworoom},
 Figure~\ref{fig:tworoom-success}). At offset $50$, Forward saves $21$
 LeWM failures and loses one success on the same starts. LeWM
 and Forward fail the same five episodes at offset $25$. Fusion lies
@@ -301,8 +301,8 @@ Fusion          & 90 & 76 & 58 & 32 \\
 \includegraphics[width=0.98\linewidth]{figures/fig_tworoom_success.png}
 \end{center}
 \caption{TwoRoom: LeWM drops as soon as the goal leaves one 25-step
-plan. Forward, using the same CEM, holds long-offset success. Fusion
-lies between Forward and LeWM.}
+plan. Forward maintains high success as the goal offset increases.
+Fusion lies between Forward and LeWM.}
 \label{fig:tworoom-success}
 \end{figure}
 
@@ -337,13 +337,12 @@ is the controlled baseline (same $E$, $P$, CEM, starts).
 \section{Conclusion}
 \label{sec:concl}
 
-FaBLeWM keeps LeWM's encoder, predictor, and 25-step CEM, and attaches
-action-free imaginers so that terminal Euclidean MSE compares
-horizon-matched latents. On TwoRoom that interface change is the
-difference between LeWM's collapse at long offsets and Forward
-success of $90/84/66$. On PushT the same construction helps at
-mid-range offsets. The working object is the CEM cost pair, not a
-longer planner.
+FaBLeWM formulates terminal scoring as temporal alignment in latent
+space. Its forward and backward imaginers transform the predicted
+endpoint and goal embedding toward a shared horizon before evaluating
+their distance. On TwoRoom, Forward sustains success of $90/84/66$ as
+the goal offset increases, while LeWM drops to $50/32/18$. On PushT,
+the same temporal alignment improves success at mid-range offsets.
 
 \subsection*{AI use statement}
 
