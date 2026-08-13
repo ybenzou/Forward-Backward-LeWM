@@ -96,19 +96,15 @@ endpoint and one from $\zg$.
 
 This paper makes three contributions.
 \begin{enumerate}
-\item \textbf{Time-aligned terminal scoring.} FaBLeWM is a terminal
-cost for short-horizon CEM. $\Iforward$ maps the predicted endpoint to
-a later latent, $\Ibackward$ maps the goal embedding to an earlier
-latent, and Euclidean distance ranks the plan.
-\item \textbf{Detached imaginer training.} Stop-gradient copies of
-LeWM latents are part of the method, not an implementation detail:
-imaginer losses do not update $E$ or $P$, so the add-on cannot rewrite
-the world model to fit the planner.
-\item \textbf{Far-goal recovery across tasks.} On PushT, TwoRoom, and
-Cube, mid-range success rises by $28$--$52\%$ over LeWM; on TwoRoom,
-long-horizon success rises from $18\%$ to $66\%$. $\Iforward$ is
-strongest on TwoRoom and Fusion on PushT, so the transferable object is
-the aligned pair, not one imaginer.
+\item \textbf{FaBLeWM.} We propose $\Iforward$ and $\Ibackward$, two
+action-free imaginers trained on detached LeWM latents, as a
+time-aligned Euclidean terminal cost for short-horizon CEM.
+\item \textbf{Cross-task gains.} On PushT, TwoRoom, and Cube,
+mid-range success rises by $28$--$52\%$ over LeWM; on TwoRoom,
+long-horizon success rises from $18\%$ to $66\%$.
+\item \textbf{Horizon-matched terminal arguments.} Euclidean CEM
+scores a predicted endpoint against a goal embedding only after both
+are mapped to one remaining time.
 \end{enumerate}
 
 \section{Related work}
@@ -217,7 +213,9 @@ space, and the 25-step horizon are shared by all four modes.
 We compare four costs on one frozen joint-trained checkpoint per task:
 LeWM, Forward, Backward, and Fusion ($0.5\,C_F+0.5\,C_B$). Each
 task uses $n{=}50$ episodes, evaluation seed $42$, shared start
-states, and the epoch-10 weights. CEM horizon is $5$ at every offset
+states, and the epoch-10 weights. The interaction budget is twice the
+goal offset ($50$, $100$, $150$, $200$ steps at offsets $25$, $50$,
+$75$, $100$). CEM horizon is $5$ at every offset
 ($25$ environment steps). Success is the environment criterion.
 PushT~\citep{florence2022ibc} and TwoRoom both use unary $B\to z$.
 
@@ -357,7 +355,8 @@ remove: the methods are evaluated in standard simulation benchmarks.
 
 \subsection*{Reproducibility statement}
 
-Section~\ref{sec:exp} states the evaluation protocol: $n{=}50$, seed
+Section~\ref{sec:exp} states the evaluation protocol: $n{=}50$
+episodes, interaction budget $2\times$ the goal offset, seed
 $42$, shared starts within each task, epoch-10 checkpoints, and CEM
 horizon $5$ at every offset. Training losses and the imagination depth
 $k$ are given in Section~\ref{sec:method}. Configurations and scripts
@@ -374,7 +373,7 @@ included with the code release.
 
 CEM uses \texttt{horizon=5}, \texttt{receding=5}, and
 \texttt{action\_block=5}, so one plan is $\planlen$ environment steps.
-Imagination depth is $k=\max((o-t-25)/5,\,0)$. The LeWM cost is
+The evaluation budget is $2\times$ the goal offset. Imagination depth is $k=\max((o-t-25)/5,\,0)$. The LeWM cost is
 $\|\Pend-\zg\|^2$; Forward is $\|\Fk(\Pend)-\zg\|^2$; unary Backward is
 $\|\Pend-\Bk(\zg)\|^2$; Fusion (avg05) is the mean of the last two.
 When $k{=}0$, Forward and Backward are skipped.
