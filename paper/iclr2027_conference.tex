@@ -59,7 +59,7 @@ short-plan endpoint to a later latent that is compared with the goal;
 $\Ibackward$ maps the goal embedding to an earlier latent that is
 compared with that endpoint. CEM ranks plans by Euclidean distance
 between this pair. On PushT, TwoRoom, and Cube, this raises
-mid-range success by $28$--$52$ percentage points over LeWM and
+mid-range success by $28$--$52\%$ over LeWM and
 long-horizon TwoRoom success from $18\%$ to $66\%$.
 \end{abstract}
 
@@ -69,41 +69,47 @@ long-horizon TwoRoom success from $18\%$ to $66\%$.
 Latent world models plan by scoring imagined rollouts in representation
 space~\citep{hafner2019planet,hafner2020dreamer,hansen2022tdmpc}.
 LeWorldModel (LeWM)~\citep{lewm2026} is an action-conditioned
-JEPA~\citep{lecun2022jepa}: an encoder $E$ produces latents, a
+Joint-Embedding Predictive Architecture
+(JEPA)~\citep{lecun2022jepa}: an encoder $E$ produces latents, a
 predictor $P$ rolls them forward under actions, and the Cross-Entropy
 Method (CEM)~\citep{rubinstein1999cem} selects an action sequence by
 terminal Euclidean distance to a goal embedding $\zg$.
 
-The difficulty is a mismatch of horizons. LeWM trains on a short
-window of four images at a time, while evaluation can place the goal
-far beyond that window. Recent work attacks the resulting drop by
-lengthening the action-conditioned predictor~\citep{du2026vlwm},
-planning at several resolutions or toward predicted
+The difficulty is not short-horizon control itself. When the goal
+already lies inside one short plan, LeWM is strong. It appears when
+evaluation places the goal beyond the four-image training window: CEM
+still emits a short plan, and the Euclidean cost compares a near-term
+predicted latent with a still-distant $\zg$. Recent work attacks the
+resulting drop by lengthening the action-conditioned
+predictor~\citep{du2026vlwm}, planning at several resolutions or toward
+predicted
 subgoals~\citep{zhang2026hwm,masip2026ffjepa,cheng2026sage}, or
 replacing Euclidean MSE with a learned metric~\citep{li2026trm}. Those
-changes leave the CEM terminal pair as it is: a near-term predicted
-latent compared with a still-distant $\zg$. Success falls as this gap
-grows.
+changes leave this terminal pair as it is.
 
-We introduce FaBLeWM (Forward and Backward LeWM). The observation is
-that terminal MSE fails when its two arguments are not aligned in
-time. We attach two action-free imaginers on detached LeWM
-latents. $\Iforward$ continues from the predicted endpoint;
-$\Ibackward$ walks $\zg$ back. They bring the pair onto a common
-horizon and form a terminal cost for CEM.
+We introduce FaBLeWM (Forward and Backward LeWM). Two small
+action-free imaginers sit on detached copies of LeWM latents, so
+imaginer losses do not update $E$ or $P$. At planning time we keep the
+same CEM and the same short plans: $\Iforward$ and $\Ibackward$ only
+rewrite the two arguments of the Euclidean cost, one from the predicted
+endpoint and one from $\zg$.
 
-Table~\ref{tab:tworoom} and Figure~\ref{fig:tworoom-success} are the
-main check. Table~\ref{tab:pusht} reports PushT.
-
-\paragraph{Contributions.}
-\begin{itemize}
-\item $\Iforward$ and $\Ibackward$, trained on detached LeWM latents,
-that align the predicted endpoint and the goal in time and form a
-horizon-matched CEM cost.
-\item On PushT, TwoRoom, and Cube, this cost raises mid-range success
-by $28$--$52$ percentage points over LeWM and long-horizon TwoRoom
-success from $18\%$ to $66\%$.
-\end{itemize}
+This paper makes three contributions.
+\begin{enumerate}
+\item \textbf{Time-aligned terminal scoring.} FaBLeWM is a terminal
+cost for short-horizon CEM. $\Iforward$ maps the predicted endpoint to
+a later latent, $\Ibackward$ maps the goal embedding to an earlier
+latent, and Euclidean distance ranks the plan.
+\item \textbf{Detached imaginer training.} Stop-gradient copies of
+LeWM latents are part of the method, not an implementation detail:
+imaginer losses do not update $E$ or $P$, so the add-on cannot rewrite
+the world model to fit the planner.
+\item \textbf{Far-goal recovery across tasks.} On PushT, TwoRoom, and
+Cube, mid-range success rises by $28$--$52\%$ over LeWM; on TwoRoom,
+long-horizon success rises from $18\%$ to $66\%$. $\Iforward$ is
+strongest on TwoRoom and Fusion on PushT, so the transferable object is
+the aligned pair, not one imaginer.
+\end{enumerate}
 
 \section{Related work}
 \label{sec:related}
