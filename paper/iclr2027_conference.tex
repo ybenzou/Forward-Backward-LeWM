@@ -10,6 +10,7 @@
 
 % Figures/tables only; do not edit iclr2027_conference.sty.
 \usepackage{graphicx}
+\usepackage[section]{placeins}
 \input{macros.tex}
 
 
@@ -233,7 +234,13 @@ uses checkpoint \texttt{fblewm}; TwoRoom uses
 \subsection{PushT}
 \label{sec:pusht}
 
-\begin{table}[t]
+Table~\ref{tab:pusht} reports PushT. At offset $25$ all four modes are
+at $82\%$. At longer offsets Backward reaches $70\%$ at $50$
+($+26$ vs.\ Official), Forward is stronger at $75$ and $100$, and
+Fusion is the best mid-range mix ($78\%$ and $50\%$ at $50$ and $75$),
+with $18\%$ at offset $100$ (Official $12\%$).
+
+\begin{table}[htbp]
 \caption{PushT success (\%). CEM horizon $5$ at all offsets. Same $50$ starts.
 Checkpoint \texttt{fblewm}, unary $B\to z$.}
 \label{tab:pusht}
@@ -249,20 +256,14 @@ Fusion (avg05)  & 82 & 78 & 50 & 18 \\
 \end{center}
 \end{table}
 
-Table~\ref{tab:pusht} reports PushT. At offset $25$ all four modes are
-at $82\%$. At longer offsets Backward reaches $70\%$ at $50$
-($+26$ vs.\ Official), Forward is stronger at $75$ and $100$, and
-Fusion is the best mid-range mix ($78\%$ and $50\%$ at $50$ and $75$),
-with $18\%$ at offset $100$ (Official $12\%$).
-
 Figure~\ref{fig:pusht-train} shows validation losses and latent norms.
 SIGReg is calm from epoch $0$. By epoch $9$, Forward and Backward
 outputs sit at about $13.0$ against encoder targets of about $13.8$,
 near the BatchNorm sphere $\sqrt{192}\approx 13.9$.
 
-\begin{figure}[t]
+\begin{figure}[htbp]
 \begin{center}
-\includegraphics[width=\linewidth]{figures/fig_pusht_train.png}
+\includegraphics[width=0.98\linewidth]{figures/fig_pusht_train.png}
 \end{center}
 \caption{PushT validation losses and latent norms over $10$ epochs.
 Official is $\mathrm{pred}+0.09\cdot\mathrm{SIGReg}$. Forward and
@@ -271,10 +272,22 @@ Backward stay near the BatchNorm sphere
 \label{fig:pusht-train}
 \end{figure}
 
+\FloatBarrier
+
 \subsection{TwoRoom}
 \label{sec:tworoom}
 
-\begin{table}[t]
+On TwoRoom (Table~\ref{tab:tworoom}, Figure~\ref{fig:tworoom-success}),
+Official is at $90\%$ for offset $25$, then $50/32/18$ at
+$50/75/100$. Forward matches Official at offset $25$ (the same five
+episodes fail) and then stays at $90/84/66$: $+40$, $+52$, and
+$+48$ points. At offset $50$, on the same starts, Forward saves $21$
+Official failures and loses one Official success. Backward adds $+4$
+to $+8$ points after offset $25$. Fusion lies between Forward and
+Official. The 25-step CEM is already competent at short range; $\Fk$
+re-scores the same candidates against $\zg$ after $k$ imaginer steps.
+
+\begin{table}[htbp]
 \caption{TwoRoom success (\%). CEM horizon $5$ at all offsets. Same $50$ starts.
 Checkpoint \texttt{fblewm\_tworoom}, unary $B\to z$.}
 \label{tab:tworoom}
@@ -290,36 +303,15 @@ Fusion (avg05)  & 90 & 76 & 58 & 32 \\
 \end{center}
 \end{table}
 
-\begin{figure}[t]
+\begin{figure}[htbp]
 \begin{center}
-\includegraphics[width=\linewidth]{figures/fig_tworoom_success.png}
+\includegraphics[width=0.98\linewidth]{figures/fig_tworoom_success.png}
 \end{center}
 \caption{TwoRoom success (\%) vs.\ goal offset. Official, Forward,
 Backward, and Fusion (avg05) share 25-step CEM. Official is strong at
 offset $25$ and drops at longer offsets; Forward stays high. Fusion
 lies between Forward and Official.}
 \label{fig:tworoom-success}
-\end{figure}
-
-On TwoRoom (Table~\ref{tab:tworoom}, Figure~\ref{fig:tworoom-success}),
-Official is at $90\%$ for offset $25$, then $50/32/18$ at
-$50/75/100$. Forward matches Official at offset $25$ (the same five
-episodes fail) and then stays at $90/84/66$: $+40$, $+52$, and
-$+48$ points. At offset $50$, on the same starts, Forward saves $21$
-Official failures and loses one Official success. Backward adds $+4$
-to $+8$ points after offset $25$. Fusion lies between Forward and
-Official. The 25-step CEM is already competent at short range; $\Fk$
-re-scores the same candidates against $\zg$ after $k$ imaginer steps.
-
-\begin{figure}[t]
-\begin{center}
-\includegraphics[width=\linewidth]{figures/fig_tworoom_train.png}
-\end{center}
-\caption{TwoRoom validation losses and latent norms, including epochs
-$0$--$1$. SIGReg spikes, then the encoder settles on the BatchNorm
-sphere. Forward and Backward outputs remain at about $5.6$ against
-targets of about $13.7$.}
-\label{fig:tworoom-train}
 \end{figure}
 
 Figure~\ref{fig:tworoom-train} starts at epoch $0$. SIGReg is $61.5$
@@ -329,6 +321,19 @@ $5.6$ while their targets sit near $13.7$. CEM orders candidates by
 these imagined latents. On PushT the output norms stay near the
 encoder sphere; on TwoRoom they do not. Forward raises long-offset
 success in both cases.
+
+\begin{figure}[htbp]
+\begin{center}
+\includegraphics[width=0.98\linewidth]{figures/fig_tworoom_train.png}
+\end{center}
+\caption{TwoRoom validation losses and latent norms, including epochs
+$0$--$1$. SIGReg spikes, then the encoder settles on the BatchNorm
+sphere. Forward and Backward outputs remain at about $5.6$ against
+targets of about $13.7$.}
+\label{fig:tworoom-train}
+\end{figure}
+
+\FloatBarrier
 
 \subsection{Scope}
 \label{sec:limits}
