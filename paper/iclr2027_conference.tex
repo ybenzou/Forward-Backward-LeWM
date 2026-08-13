@@ -13,8 +13,8 @@
 \input{macros.tex}
 
 
-\title{FBLeWM: Forward and Backward Latent Imaginers\\
-for Short-Horizon CEM Planning}
+\title{FaBLeWM: A Longer View for\\
+Short-Horizon World-Model Planning}
 
 % Authors must not appear in the submitted version. They should be hidden
 % as long as the \iclrfinalcopy macro remains commented out below.
@@ -44,72 +44,173 @@ Address \\
 \maketitle
 
 \begin{abstract}
-% One paragraph. Locked claim: F/B give a 25-step CEM a longer-range ranking
-% signal; we do not claim calibrated $F^{k}(p)\approx z_{t+k}$.
+Latent world models that plan with short-horizon shooting become myopic
+when the goal lies beyond one plan. We keep the official LeWorldModel
+(LeWM) encoder, action-conditioned predictor, and 25-step
+cross-entropy method (CEM) planner, and add two action-free imaginers
+trained on detached latents. A forward map continues from the predicted
+endpoint; a backward map walks the goal back toward it. Only the CEM
+cost changes. We call this \emph{FaBLeWM} (Forward and Backward LeWM).
+The imaginers are a longer-range ranking signal, not a claim that
+$\Fk(p)$ recovers $z_{t+k}$. On PushT and TwoRoom ($n{=}50$, shared
+starts, epoch-10 checkpoint, CEM horizon $5$), FaBLeWM matches Official
+LeWM at goal offset $25$, where imagination is unused, and raises
+success at offsets $50$--$100$. On TwoRoom, Official already reaches
+$90\%$ at offset $25$ and then falls to $50/32/18$; Forward stays at
+$90/84/66$.
 \end{abstract}
 
 \section{Introduction}
 \label{sec:intro}
 
+A learned latent world model is often paired with a short-horizon
+planner. LeWorldModel~\citep{lewm2026} instantiates a joint-embedding
+predictive architecture~\citep{lecun2022jepa} as an action-conditioned
+world model: an encoder $E$ maps observations to latents, a predictor
+$P$ rolls those latents forward under actions, and CEM~\citep{rubinstein1999cem}
+selects a 25-step action sequence by the distance between the predicted
+endpoint and a goal embedding. That loop is enough when the goal is
+inside one planning horizon. It is not enough when the goal is $50$,
+$75$, or $100$ steps away. CEM still emits 25-step plans; it ranks them
+by how close a near-term endpoint sits to a still-distant goal.
+Official success then drops, even if the same controller is reliable at
+offset $25$.
+
+Lengthening CEM is one response. We do not take it. We keep Official
+LeWM---the encoder, the predictor, SIGReg, and the 25-step planner---and
+change only the cost that ranks candidate plans. Two small action-free
+networks, a forward imaginer $F$ and a backward imaginer $B$, are
+trained on stop-gradient latents so that their losses cannot rewrite
+$E$ or $P$. At evaluation, $F$ continues from the predicted endpoint
+and $B$ walks the goal backward. When the remaining time to the goal
+fits in one CEM plan, both maps are bypassed and the cost is exactly
+Official. When it does not, CEM still plans 25 steps, but it scores
+those steps with a longer-range view.
+
+We call the method FaBLeWM (Forward and Backward LeWM). On PushT and
+TwoRoom, with $50$ shared starts per task and the epoch-10 checkpoint,
+the four modes coincide at offset $25$ and diverge later. On PushT,
+Backward helps most at offset $50$ ($70\%$ vs.\ Official $44\%$) and
+Forward is more stable at $75$ and $100$; a simple average of the two
+costs is the strongest mid-range mix. On TwoRoom the bottleneck is
+horizon mismatch rather than short-horizon competence: Official is
+already at $90\%$ for offset $25$, then $50/32/18$. Forward recovers
+$90/84/66$. A paired comparison at offset $50$ saves $21$ Official
+failures and loses one success. We read this as ranking, not as
+calibrated long-horizon prediction. Training diagnostics agree. On
+PushT, $F$ and $B$ stay near the encoder's BatchNorm sphere; on
+TwoRoom they do not, and Forward still helps.
+
+\paragraph{Contributions.}
+(i)~Detached forward and backward imaginers on an unchanged LeWM path.
+(ii)~A CEM cost that applies $k$-step imagination only when the goal
+lies beyond one plan, and reduces to Official when $k{=}0$.
+(iii)~PushT and TwoRoom results in which longer-offset success rises
+without a claim that $\Fk(p)\approx z_{t+k}$.
+
 \section{Related work}
 \label{sec:related}
 
-LeWM~\citep{lewm2026} trains an encoder $E$, an action-conditioned predictor $P$, and a CEM planner with next-embedding MSE plus SIGReg. FBLeWM keeps this official path unchanged and adds two detached action-free imaginers.
+Latent world models plan by imagining rollouts rather than by predicting
+pixels. PlaNet~\citep{hafner2019planet} and Dreamer~\citep{hafner2020dreamer}
+learn dynamics in a latent space; TD-MPC~\citep{hansen2022tdmpc} and
+LeWM~\citep{lewm2026} score action sequences with CEM in that space.
+All of these methods remain limited by the horizon of the shooter.
+FaBLeWM does not replace LeWM's predictor with a longer action-conditioned
+model. It adds action-free maps that change how a short CEM ranks
+plans.
+
+JEPA~\citep{lecun2022jepa} predicts in representation space.
+LeWM is an action-conditioned JEPA world model with a Sketch Isotropic
+Gaussian Regularizer (SIGReg) on the encoder. We take that model as
+given. Inverse models that regress actions from pairs of states are a
+different object: our backward imaginer is action-free and lives in
+latent space. Hierarchical controllers that emit subgoals for a
+lower-level policy are also different. $F$ and $B$ do not propose a
+subgoal that another policy tracks; they re-score a flat 25-step CEM.
+The baseline throughout is therefore Official LeWM with the same planner.
 
 \section{Method}
 \label{sec:method}
 
-\subsection{Official LeWM (unchanged)}
-\[
+\subsection{Official LeWM}
+\label{sec:official}
+
+We use the official LeWM training path without modification. A window of
+four encoded observations $z_{0:3}=E(o_{0:3})$ and the corresponding
+actions is fed to $P$. There is no stop-gradient on prediction targets.
+The loss is next-embedding MSE plus SIGReg,
+\begin{equation}
 \mathcal{L}_{\mathrm{official}}
 =\underbrace{\|P(z,a)-z_{\mathrm{next}}\|^2}_{\mathrm{pred}}
 +0.09\,\mathcal{L}_{\mathrm{SIGReg}}(z).
-\]
-CEM always plans $\planlen$ environment steps.
+\end{equation}
+At evaluation, CEM always plans $\planlen$ environment steps
+(horizon $5$, receding horizon $5$, action block $5$). Official cost is
+$\|\Pend-\zg\|^2$, where $\Pend$ is the predicted embedding after those
+$25$ steps.
 
 \subsection{Detached imaginers}
-Forward and Backward read stop-gradient latents. Their losses do not update $E$ or $P$.
+\label{sec:imaginers}
+
+Forward $F$ and Backward $B$ are residual MLPs on a single latent.
+They read stop-gradient copies of $z$ and $P$'s output $p$. Their
+losses do not update $E$ or $P$. With a four-step window,
+$p_1,p_2,p_3$ align with $z_1,z_2,z_3$.
 
 \paragraph{Forward.}
-$F(p)\to z$ (unary). At evaluation,
-\[
-C_{F}=\bigl\|\Fk\bigl(P_{25}\bigr)-\zg\bigr\|^2.
-\]
+$F$ is trained to map a predicted latent to a later encoder latent,
+\begin{equation}
+F(p_1)\to z_2,\qquad F(p_2)\to z_3,\qquad F(F(p_1))\to z_3,
+\end{equation}
+with equal weight on the one-step and two-step terms. At evaluation,
+\begin{equation}
+C_F=\bigl\|\Fk(\Pend)-\zg\bigr\|^2.
+\end{equation}
 
-\paragraph{Backward (unary, $B\to z$; figures in this draft).}
-$B(z_{t+1})\to z_t$. At evaluation,
-\[
-C_{B}=\bigl\|P_{25}-\Bk(\zg)\bigr\|^2.
-\]
-
-\paragraph{Backward (conditional, \texttt{now}; TwoRoom v2, not in figures yet).}
-\[
-g\leftarrow B(z_0,g),\qquad
-B(z_0,z_3)\to z_2,\quad
-B(z_0,z_2)\to z_1.
-\]
+\paragraph{Backward.}
+The results in this paper use unary $B(z)\to z$:
+\begin{equation}
+B(z_3)\to z_2,\qquad B(z_2)\to z_1,\qquad B(B(z_3))\to z_1.
+\end{equation}
+At evaluation,
+\begin{equation}
+C_B=\bigl\|\Pend-\Bk(\zg)\bigr\|^2.
+\end{equation}
 
 \paragraph{Imagination depth.}
-\[
-k=\max\bigl((o-t-\planlen)/5,\,0\bigr)
-\quad\text{(goal offset $o$, elapsed $t$, action block $5$).}
-\]
-When $k=0$, $F$ and $B$ are bypassed and the cost matches Official.
+For goal offset $o$ and elapsed time $t$,
+\begin{equation}
+k=\max\bigl((o-t-\planlen)/5,\,0\bigr).
+\end{equation}
+The division by $5$ matches the action block, so $k$ counts imaginer
+steps rather than environment steps. When $k{=}0$, $F$ and $B$ are
+bypassed and $C_F=C_B=\|\Pend-\zg\|^2$. Offset $25$ at the first replan
+has $k{=}0$, which is the sanity check that Official and the imaginer
+modes must match.
 
-\paragraph{Fusion (avg05).}
-$C=0.5\,C_F+0.5\,C_B$.
+\paragraph{Fusion.}
+Unless noted, Fusion is a uniform mix
+$C=0.5\,C_F+0.5\,C_B$ (avg05). CEM, the action space, and the 25-step
+horizon are shared by Official, Forward, Backward, and Fusion.
 
 \section{Experiments}
 \label{sec:exp}
 
-Protocol: $n{=}50$, seed $42$, shared starts within each task, checkpoint at epoch 10, CEM horizon $5$ unless noted. Success is the environment criterion, not latent MSE.
+We evaluate four planning modes on the same frozen checkpoint: Official,
+Forward, Backward, and Fusion (avg05). Each task uses $n{=}50$ episodes,
+evaluation seed $42$, and a shared set of start states. Checkpoints are
+taken at epoch $10$. CEM uses horizon $5$ at every offset. Success is
+the environment's criterion, not latent MSE. PushT~\citep{florence2022ibc}
+uses checkpoint \texttt{fblewm}; TwoRoom uses
+\texttt{fblewm\_tworoom}. Both train unary $B\to z$.
 
 \subsection{PushT}
 \label{sec:pusht}
 
 \begin{table}[t]
-\caption{PushT success (\%). CEM${=}5$ at all offsets. Same 50 starts.
-Checkpoint \texttt{fblewm} (unary $B\to z$).}
+\caption{PushT success (\%). CEM horizon $5$ at all offsets. Same $50$ starts.
+Checkpoint \texttt{fblewm}, unary $B\to z$.}
 \label{tab:pusht}
 \begin{center}
 \begin{tabular}{lcccc}
@@ -123,19 +224,28 @@ Fusion (avg05)  & 82 & 78 & 50 & 18 \\
 \end{center}
 \end{table}
 
-\begin{figure}[t]
-\begin{center}
-\includegraphics[width=\linewidth]{figures/fig_pusht_success.png}
-\end{center}
-\caption{PushT success vs.\ offset. This PNG uses CEM horizon $2$ at offset $25$ (Official $72$, Forward $86$); offsets $50$--$100$ match Table~\ref{tab:pusht}. If the paper protocol is CEM${=}5$ everywhere, quote the table at offset $25$ ($82/82/82/82$), not the bars.}
-\label{fig:pusht-success}
-\end{figure}
+Table~\ref{tab:pusht} is the main PushT result. At offset $25$ all four
+modes are at $82\%$, as required by $k{=}0$. Gains appear once the goal
+lies beyond one CEM plan. Backward is strongest at offset $50$
+($+26$ points vs.\ Official). Forward is the better of the two unary
+maps at offsets $75$ and $100$. Fusion is the best mid-range mix
+($78\%$ and $50\%$ at offsets $50$ and $75$) and a small lift at
+offset $100$ ($18\%$ vs.\ $12\%$). Offset $100$ remains hard.
+
+Figure~\ref{fig:pusht-train} shows validation losses and latent norms.
+SIGReg is calm from epoch $0$. By epoch $9$, Forward and Backward
+outputs sit at about $13.0$ against encoder targets of about $13.8$,
+near the BatchNorm sphere $\sqrt{192}\approx 13.9$. On this task the
+imaginers can help while staying on the same scale as $E$.
 
 \begin{figure}[t]
 \begin{center}
 \includegraphics[width=\linewidth]{figures/fig_pusht_train.png}
 \end{center}
-\caption{PushT validation losses and latent norms. F/B outputs stay near the BatchNorm sphere ($\Vert z\Vert{\approx}\sqrt{192}{\approx}13.9$).}
+\caption{PushT validation losses and latent norms over $10$ epochs.
+Official is $\mathrm{pred}+0.09\cdot\mathrm{SIGReg}$. Forward and
+Backward stay near the BatchNorm sphere
+($\Vert z\Vert\approx\sqrt{192}\approx 13.9$).}
 \label{fig:pusht-train}
 \end{figure}
 
@@ -143,8 +253,8 @@ Fusion (avg05)  & 82 & 78 & 50 & 18 \\
 \label{sec:tworoom}
 
 \begin{table}[t]
-\caption{TwoRoom success (\%). CEM${=}5$ at all offsets. Same 50 starts.
-Checkpoint \texttt{fblewm\_tworoom} (unary $B\to z$).}
+\caption{TwoRoom success (\%). CEM horizon $5$ at all offsets. Same $50$ starts.
+Checkpoint \texttt{fblewm\_tworoom}, unary $B\to z$.}
 \label{tab:tworoom}
 \begin{center}
 \begin{tabular}{lcccc}
@@ -162,82 +272,121 @@ Fusion (avg05)  & 90 & 76 & 58 & 32 \\
 \begin{center}
 \includegraphics[width=\linewidth]{figures/fig_tworoom_success.png}
 \end{center}
-\caption{TwoRoom success vs.\ offset (CEM${=}5$). Forward recovers long-offset success; Fusion does not beat Forward.}
+\caption{TwoRoom success (\%) vs.\ goal offset. Official LeWM uses
+$25$-step CEM. Forward, Backward, and Fusion (avg05) keep that CEM and
+change only the cost. Official is already strong at offset $25$ and
+drops once the goal lies beyond one horizon; Forward recovers
+long-offset success. Fusion does not beat Forward.}
 \label{fig:tworoom-success}
 \end{figure}
+
+TwoRoom makes the horizon mismatch plain
+(Table~\ref{tab:tworoom}, Figure~\ref{fig:tworoom-success}). Official
+is already at $90\%$ for offset $25$, then $50/32/18$ at
+$50/75/100$. Forward matches Official at offset $25$---the same five
+episodes fail---and then stays at $90/84/66$. Relative to Official,
+that is $+40$, $+52$, and $+48$ points. At offset $50$, a paired
+count on the same starts is $21$ Official failures that Forward saves
+and one Official success that Forward loses. Backward is a small lift
+($+4$ to $+8$ points after offset $25$). Fusion sits between Forward
+and Official; averaging in Backward hurts here.
+
+This pattern is the opposite of ``the short-horizon controller is weak.''
+The short-horizon controller is fine. What fails is ranking 25-step
+plans against a goal that those plans cannot reach. Applying $\Fk$
+before the distance to $\zg$ is a longer view of the same candidates,
+not a new planner.
 
 \begin{figure}[t]
 \begin{center}
 \includegraphics[width=\linewidth]{figures/fig_tworoom_train.png}
 \end{center}
-\caption{TwoRoom validation losses and latent norms, including SIGReg warmup at epochs $0$--$1$. After the encoder settles, F/B outputs remain ${\approx}5.6$ vs.\ target ${\approx}13.7$. Planning success in Table~\ref{tab:tworoom} still holds: ranking can survive a scale gap.}
+\caption{TwoRoom validation losses and latent norms, including epochs
+$0$--$1$. SIGReg spikes, then the encoder settles on the BatchNorm
+sphere. Forward and Backward \emph{outputs} remain at about $5.6$
+against targets of about $13.7$. Table~\ref{tab:tworoom} still holds:
+ranking can survive a scale gap.}
 \label{fig:tworoom-train}
 \end{figure}
 
-\subsection{Cube}
-\label{sec:cube}
+Figure~\ref{fig:tworoom-train} starts at epoch $0$. SIGReg is large in
+the first two epochs ($61.5$ then $51.2$) and then falls as the encoder
+moves onto the sphere; prediction MSE is not the quantity that
+``recovers.'' After that, $F$ and $B$ outputs stay near $5.6$ while
+their targets sit near $13.7$. We do not treat that gap as the cause of
+the TwoRoom Forward gain, and we do not treat the PushT alignment as a
+requirement either. Eval cost only has to order CEM samples.
+PushT shows that F/B can help when norms are aligned; TwoRoom shows that
+they can help when they are not. Neither plot is evidence that
+$\Fk(p)$ is a calibrated forecast of $z_{t+k}$.
+
+\subsection{Limitations of the present results}
+\label{sec:limits}
+
+The study is two tasks, one checkpoint time, and unary $B\to z$. PushT
+at offset $100$ is still low. Fusion is not a universal improvement:
+it is best on PushT at mid range and worse than Forward on TwoRoom.
+We do not report other backward targets or further environments here.
 
 \section{Conclusion}
 \label{sec:concl}
+
+FaBLeWM leaves Official LeWM's encoder, predictor, and 25-step CEM in
+place, and adds detached forward and backward imaginers that change how
+that CEM ranks plans. On PushT and TwoRoom, the effect shows up where
+it should: not at offset $25$, where $k{=}0$, but at longer offsets,
+where a short planner is asked to choose among plans that do not reach
+the goal. The working interpretation is a longer-range ranking signal,
+not a calibrated long-horizon latent model.
 
 \subsection*{AI use statement}
 
 (This section is \textbf{required} and does not count toward the page limit.)
 
-In this work, we used generative AI tools for code assistance and grammar checking.
-We have reviewed all AI-assisted work. We take responsibility for the final content of this work,
-including text, claims or artifacts produced with the aid of generative AI.
-
-See the ICLR 2027 AI Policy for Authors for more details. This statement should
-not be more than 1 page.
+We used generative AI tools for implementation assistance and for
+drafting and editing this manuscript. We reviewed the code, the
+experimental numbers, and the text. We take responsibility for the
+final content, including claims and artifacts produced with the aid of
+generative AI.
 
 \subsection*{Ethics statement}
 
-(This section is \textbf{recommended} and does not count toward the page limit.)
-
-If authors feel that their paper submission raises questions regarding the Code
-of Ethics, they are encouraged to include a paragraph of Ethics Statement (at
-the end of the main text before references) to address potential concerns where
-appropriate. Topics include, but are not limited to, studies that involve human
-subjects, practices to data set releases, potentially harmful insights,
-methodologies and applications, potential conflicts of interest and sponsorship,
-discrimination/bias/fairness concerns, privacy and security issues, legal
-compliance, and research integrity issues (e.g., IRB, documentation, research
-ethics). This statement should not be more than 1 page.
+This work studies simulated control (PushT and TwoRoom). It does not
+involve human subjects, personal data, or deployed decision systems.
+The usual dual-use concerns of motor-control research apply only at a
+remove: the methods are evaluated in standard simulation benchmarks.
 
 \subsection*{Reproducibility statement}
 
-(This section is \textbf{recommended} and does not count toward the page limit.)
-
-It is important that the work published in ICLR is reproducible. Authors are
-strongly encouraged to include a paragraph-long Reproducibility Statement at the
-end of the main text (before references) to discuss the efforts that have been
-made to ensure reproducibility. This paragraph should not itself describe
-details needed for reproducing the results, but rather reference the parts of
-the main paper, appendix, and supplemental materials that will help with
-reproducibility. For example, for novel models or algorithms, a link to an
-anonymous downloadable source code can be submitted as supplementary materials;
-for theoretical results, clear explanations of any assumptions and a complete
-proof of the claims can be included in the appendix; for any datasets used in
-the experiments, a complete description of the data processing steps can be
-provided in the supplementary materials. Each of the above are examples of
-things that can be referenced in the reproducibility statement.
-
-\subsubsection*{Author Contributions}
-If you'd like to, you may include  a section for author contributions as is done
-in many journals. This is optional and at the discretion of the authors.
-
-\subsubsection*{Acknowledgments}
-Use unnumbered third level headings for the acknowledgments. All
-acknowledgments, including those to funding agencies, go at the end of the paper.
+Section~\ref{sec:exp} states the evaluation protocol: $n{=}50$, seed
+$42$, shared starts within each task, epoch-10 checkpoints, and CEM
+horizon $5$ at every offset. Training losses and the imagination depth
+$k$ are given in Section~\ref{sec:method}. Configurations and scripts
+used to produce Tables~\ref{tab:pusht}--\ref{tab:tworoom} will be
+included with the code release.
 
 
 \bibliography{iclr2027_conference}
 \bibliographystyle{iclr2027_conference}
 
 \appendix
-\section{Appendix}
-You may include other additional sections here.
+\section{Protocol details}
+\label{app:protocol}
 
+CEM uses \texttt{horizon=5}, \texttt{receding=5}, and
+\texttt{action\_block=5}, so one plan is $\planlen$ environment steps.
+Imagination depth is $k=\max((o-t-25)/5,\,0)$. Official cost is
+$\|\Pend-\zg\|^2$; Forward is $\|\Fk(\Pend)-\zg\|^2$; unary Backward is
+$\|\Pend-\Bk(\zg)\|^2$; Fusion (avg05) is the mean of the last two.
+When $k{=}0$, Forward and Backward are skipped.
+
+PushT starts hash:
+\texttt{9d47d5e78eb0b98693bdb739e6e107fca7b52a7fa5d38189e418c242d7d2a703}.
+TwoRoom starts hash:
+\texttt{55d795562181c8f5eb12def43fb995cedd0d45c909fd1f39e38518155e16ad80}.
+
+On TwoRoom at offset $50$, Forward vs.\ Official on the same $50$
+starts: $21$ episodes saved, $1$ lost. Official and Forward at offset
+$25$ fail on the same five episodes.
 
 \end{document}
