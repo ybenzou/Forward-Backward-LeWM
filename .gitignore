@@ -2,9 +2,13 @@
 .cache/
 logs/
 outputs/
+models/
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .hydra/
 *.egg-info/
 .DS_Store
+*.pt
+*.ckpt
+wandb/
