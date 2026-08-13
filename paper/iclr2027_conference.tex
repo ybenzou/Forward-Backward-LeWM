@@ -78,7 +78,8 @@ failure; the terminal pair is.
 FaBLeWM is a method for that interface. We attach two small
 action-free imaginers, $F$ and $B$, trained on stop-gradient copies of
 LeWM latents, and use them only when the remaining time to the goal
-exceeds one CEM horizon. $F$ continues from the predicted endpoint
+exceeds one CEM horizon (Figure~\ref{fig:framework}). $F$ continues
+from the predicted endpoint
 $\Pend$; $B$ walks $\zg$ backward. CEM still plans 25 steps and still
 minimizes Euclidean MSE; the two arguments of that MSE are brought
 onto a common horizon. When the goal already fits in one plan, $F$
@@ -139,6 +140,23 @@ $F$ and $B$.
 
 \section{Method}
 \label{sec:method}
+
+Figure~\ref{fig:framework} is the training loop. Pink modules are
+LeWM's encoder $E$ and action-conditioned predictor $P$. The blue
+imaginer is trained on detached latents: forward on $P$'s outputs,
+backward from later encoder states.
+
+\begin{figure}[htbp]
+\begin{center}
+\includegraphics[width=0.98\linewidth]{figures/lewm.png}
+\end{center}
+\caption{FaBLeWM keeps LeWM's $E$ and $P$ (pink). The blue imaginer
+($I$ in the figure) is $F$ in the top panel and $B$ in the bottom:
+forward continues from predicted latents, backward walks encoder
+latents toward the past. CEM still plans a short horizon; only the
+terminal pair of the Euclidean cost changes.}
+\label{fig:framework}
+\end{figure}
 
 \subsection{LeWM}
 \label{sec:lewm}
