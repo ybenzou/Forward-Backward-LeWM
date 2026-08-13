@@ -45,19 +45,18 @@ Address \\
 
 \begin{abstract}
 Latent world models that plan with short-horizon shooting become myopic
-when the goal lies beyond one plan. We keep the official LeWorldModel
-(LeWM) encoder, action-conditioned predictor, and 25-step
-cross-entropy method (CEM) planner, and add two action-free imaginers
-trained on detached latents. A forward map continues from the predicted
-endpoint; a backward map walks the goal back toward it. Only the CEM
-cost changes. We call this \emph{FaBLeWM} (Forward and Backward LeWM).
-The imaginers are a longer-range ranking signal, not a claim that
-$\Fk(p)$ recovers $z_{t+k}$. On PushT and TwoRoom ($n{=}50$, shared
-starts, epoch-10 checkpoint, CEM horizon $5$), FaBLeWM matches Official
-LeWM at goal offset $25$, where imagination is unused, and raises
-success at offsets $50$--$100$. On TwoRoom, Official already reaches
-$90\%$ at offset $25$ and then falls to $50/32/18$; Forward stays at
-$90/84/66$.
+when the goal lies beyond one plan. We present FaBLeWM (Forward and
+Backward LeWM). The official LeWorldModel (LeWM) encoder,
+action-conditioned predictor, and 25-step cross-entropy method (CEM)
+planner are left unchanged. Two action-free imaginers, trained on
+detached latents, extend the cost that ranks CEM candidates: a forward
+map continues from the predicted endpoint, and a backward map walks the
+goal back toward it. Imagination is used only when the remaining time
+to the goal exceeds one planning horizon. On PushT and TwoRoom
+($n{=}50$, shared starts, epoch-10 checkpoint, CEM horizon $5$),
+FaBLeWM matches Official LeWM at goal offset $25$ and raises success at
+offsets $50$--$100$. On TwoRoom, Official already reaches $90\%$ at
+offset $25$ and then falls to $50/32/18$; Forward stays at $90/84/66$.
 \end{abstract}
 
 \section{Introduction}
@@ -76,59 +75,86 @@ by how close a near-term endpoint sits to a still-distant goal.
 Official success then drops, even if the same controller is reliable at
 offset $25$.
 
-Lengthening CEM is one response. We do not take it. We keep Official
-LeWM---the encoder, the predictor, SIGReg, and the 25-step planner---and
-change only the cost that ranks candidate plans. Two small action-free
-networks, a forward imaginer $F$ and a backward imaginer $B$, are
-trained on stop-gradient latents so that their losses cannot rewrite
-$E$ or $P$. At evaluation, $F$ continues from the predicted endpoint
+FaBLeWM keeps Official LeWM---the encoder, the predictor, SIGReg, and
+the 25-step planner---and extends the cost that ranks candidate plans.
+Two action-free networks, a forward imaginer $F$ and a backward
+imaginer $B$, are trained on stop-gradient latents and update only
+themselves. At evaluation, $F$ continues from the predicted endpoint
 and $B$ walks the goal backward. When the remaining time to the goal
-fits in one CEM plan, both maps are bypassed and the cost is exactly
-Official. When it does not, CEM still plans 25 steps, but it scores
-those steps with a longer-range view.
+fits in one CEM plan, both maps are bypassed and the cost is Official.
+When it does not, CEM still plans 25 steps and scores them after $k$
+imaginer steps.
 
-We call the method FaBLeWM (Forward and Backward LeWM). On PushT and
-TwoRoom, with $50$ shared starts per task and the epoch-10 checkpoint,
-the four modes coincide at offset $25$ and diverge later. On PushT,
-Backward helps most at offset $50$ ($70\%$ vs.\ Official $44\%$) and
-Forward is more stable at $75$ and $100$; a simple average of the two
-costs is the strongest mid-range mix. On TwoRoom the bottleneck is
-horizon mismatch rather than short-horizon competence: Official is
-already at $90\%$ for offset $25$, then $50/32/18$. Forward recovers
-$90/84/66$. A paired comparison at offset $50$ saves $21$ Official
-failures and loses one success. We read this as ranking, not as
-calibrated long-horizon prediction. Training diagnostics agree. On
-PushT, $F$ and $B$ stay near the encoder's BatchNorm sphere; on
-TwoRoom they do not, and Forward still helps.
+On PushT and TwoRoom, with $50$ shared starts per task and the epoch-10
+checkpoint, the four modes coincide at offset $25$ and diverge later.
+On PushT, Backward reaches $70\%$ at offset $50$ (Official $44\%$) and
+Forward is stronger at $75$ and $100$; averaging the two costs is the
+best mid-range mix. On TwoRoom, Official is already at $90\%$ for
+offset $25$, then $50/32/18$. Forward stays at $90/84/66$. A paired
+comparison at offset $50$ saves $21$ Official failures and loses one
+success. On PushT, $F$ and $B$ stay near the encoder's BatchNorm
+sphere; on TwoRoom their output norms are lower, and Forward still
+raises long-offset success.
 
 \paragraph{Contributions.}
 (i)~Detached forward and backward imaginers on an unchanged LeWM path.
 (ii)~A CEM cost that applies $k$-step imagination only when the goal
 lies beyond one plan, and reduces to Official when $k{=}0$.
-(iii)~PushT and TwoRoom results in which longer-offset success rises
-without a claim that $\Fk(p)\approx z_{t+k}$.
+(iii)~PushT and TwoRoom results in which the same 25-step CEM reaches
+farther goals.
 
 \section{Related work}
 \label{sec:related}
 
-Latent world models plan by imagining rollouts rather than by predicting
-pixels. PlaNet~\citep{hafner2019planet} and Dreamer~\citep{hafner2020dreamer}
-learn dynamics in a latent space; TD-MPC~\citep{hansen2022tdmpc} and
-LeWM~\citep{lewm2026} score action sequences with CEM in that space.
-All of these methods remain limited by the horizon of the shooter.
-FaBLeWM does not replace LeWM's predictor with a longer action-conditioned
-model. It adds action-free maps that change how a short CEM ranks
-plans.
+\paragraph{Latent world models and short-horizon CEM.}
+PlaNet~\citep{hafner2019planet} and Dreamer~\citep{hafner2020dreamer}
+learn dynamics in a latent space and plan by imagination.
+TD-MPC~\citep{hansen2022tdmpc}, DINO-WM~\citep{zhou2025dinowm}, and
+LeWM~\citep{lewm2026} score action sequences with CEM or a close
+variant, typically by Euclidean distance between a predicted terminal
+latent and a goal embedding. JEPA~\citep{lecun2022jepa} predicts in
+representation space; LeWM is an action-conditioned JEPA world model
+with SIGReg on the encoder. FaBLeWM uses that Official path as the
+backbone: the same $E$, $P$, 25-step CEM, and terminal MSE.
 
-JEPA~\citep{lecun2022jepa} predicts in representation space.
-LeWM is an action-conditioned JEPA world model with a Sketch Isotropic
-Gaussian Regularizer (SIGReg) on the encoder. We take that model as
-given. Inverse models that regress actions from pairs of states are a
-different object: our backward imaginer is action-free and lives in
-latent space. Hierarchical controllers that emit subgoals for a
-lower-level policy are also different. $F$ and $B$ do not propose a
-subgoal that another policy tracks; they re-score a flat 25-step CEM.
-The baseline throughout is therefore Official LeWM with the same planner.
+\paragraph{Longer action-conditioned predictors.}
+Variable-Length Latent World Models~\citep{du2026vlwm} train $P$ to
+map a state and an action sequence of length $k$ directly to
+$z_{t+k}$, with a curriculum over $k$, so the planner can query
+horizons other than one-step rollouts. FaBLeWM leaves Official $P$ at
+its trained one-step (action-block) scale and applies an
+\emph{action-free} map after the 25-step CEM endpoint.
+
+\paragraph{Hierarchy and subgoals.}
+HWM~\citep{zhang2026hwm} trains world models at several temporal
+resolutions in a shared latent space; high-level predictions become
+subgoals for short-horizon MPC, with a learned action encoder for
+macro-actions. FF-JEPA~\citep{masip2026ffjepa} adds an action-free
+forward latent planner that proposes the next subgoal; CEM then
+reaches that subgoal with the action-conditioned model, and the
+setting is goal-free. SAGE~\citep{cheng2026sage} keeps a frozen
+LeWM and CEM budget, predicts a reachable latent subgoal at a
+requested duration, and uses it to condition the action
+\emph{proposals} that CEM refines. FaBLeWM keeps a single flat 25-step
+CEM against the given goal image. $F$ and $B$ change the arguments of
+the terminal cost, not the subgoal that CEM tracks and not the
+proposal distribution.
+
+\paragraph{CEM cost and latent metrics.}
+The default CEM cost in this line of work is terminal Euclidean
+MSE~\citep{lewm2026,zhou2025dinowm,hansen2022tdmpc}. That cost is
+fragile when latent geometry and reachability disagree. Temporal
+straightening~\citep{wang2026straightening} regularizes encoder
+trajectories so Euclidean distance better matches geodesic progress.
+Trajectory reachability metrics~\citep{li2026trm} keep $E$, $P$, and
+CEM fixed and replace or mix the terminal cost with a pairwise head
+trained on horizon-matched temporal separations; on a hard TwoRoom
+setting this ranking repair is the difference between collapse and
+high success. FaBLeWM also keeps Euclidean MSE and the Official
+dynamics. It changes \emph{which} pair the MSE sees: $\Fk(\Pend)$
+versus $\zg$, or $\Pend$ versus $\Bk(\zg)$, with $k$ set by the
+remaining time beyond one plan. The metric stays MSE; the compared
+latents are brought onto a common horizon.
 
 \section{Method}
 \label{sec:method}
@@ -136,10 +162,10 @@ The baseline throughout is therefore Official LeWM with the same planner.
 \subsection{Official LeWM}
 \label{sec:official}
 
-We use the official LeWM training path without modification. A window of
-four encoded observations $z_{0:3}=E(o_{0:3})$ and the corresponding
-actions is fed to $P$. There is no stop-gradient on prediction targets.
-The loss is next-embedding MSE plus SIGReg,
+We use the official LeWM training path. A window of four encoded
+observations $z_{0:3}=E(o_{0:3})$ and the corresponding actions is fed
+to $P$. Prediction targets are the encoder latents. The loss is
+next-embedding MSE plus SIGReg,
 \begin{equation}
 \mathcal{L}_{\mathrm{official}}
 =\underbrace{\|P(z,a)-z_{\mathrm{next}}\|^2}_{\mathrm{pred}}
@@ -154,8 +180,8 @@ $25$ steps.
 \label{sec:imaginers}
 
 Forward $F$ and Backward $B$ are residual MLPs on a single latent.
-They read stop-gradient copies of $z$ and $P$'s output $p$. Their
-losses do not update $E$ or $P$. With a four-step window,
+They read stop-gradient copies of $z$ and of $P$'s output $p$, so
+imaginer losses train only $F$ and $B$. With a four-step window,
 $p_1,p_2,p_3$ align with $z_1,z_2,z_3$.
 
 \paragraph{Forward.}
@@ -169,7 +195,7 @@ C_F=\bigl\|\Fk(\Pend)-\zg\bigr\|^2.
 \end{equation}
 
 \paragraph{Backward.}
-The results in this paper use unary $B(z)\to z$:
+Unary Backward maps encoder latents, $B(z)\to z$:
 \begin{equation}
 B(z_3)\to z_2,\qquad B(z_2)\to z_1,\qquad B(B(z_3))\to z_1.
 \end{equation}
@@ -184,10 +210,9 @@ For goal offset $o$ and elapsed time $t$,
 k=\max\bigl((o-t-\planlen)/5,\,0\bigr).
 \end{equation}
 The division by $5$ matches the action block, so $k$ counts imaginer
-steps rather than environment steps. When $k{=}0$, $F$ and $B$ are
-bypassed and $C_F=C_B=\|\Pend-\zg\|^2$. Offset $25$ at the first replan
-has $k{=}0$, which is the sanity check that Official and the imaginer
-modes must match.
+steps. When $k{=}0$, $F$ and $B$ are bypassed and
+$C_F=C_B=\|\Pend-\zg\|^2$. At offset $25$ the first replan has
+$k{=}0$, so Official, Forward, Backward, and Fusion share the same cost.
 
 \paragraph{Fusion.}
 Unless noted, Fusion is a uniform mix
@@ -201,7 +226,7 @@ We evaluate four planning modes on the same frozen checkpoint: Official,
 Forward, Backward, and Fusion (avg05). Each task uses $n{=}50$ episodes,
 evaluation seed $42$, and a shared set of start states. Checkpoints are
 taken at epoch $10$. CEM uses horizon $5$ at every offset. Success is
-the environment's criterion, not latent MSE. PushT~\citep{florence2022ibc}
+the environment criterion. PushT~\citep{florence2022ibc}
 uses checkpoint \texttt{fblewm}; TwoRoom uses
 \texttt{fblewm\_tworoom}. Both train unary $B\to z$.
 
@@ -224,19 +249,16 @@ Fusion (avg05)  & 82 & 78 & 50 & 18 \\
 \end{center}
 \end{table}
 
-Table~\ref{tab:pusht} is the main PushT result. At offset $25$ all four
-modes are at $82\%$, as required by $k{=}0$. Gains appear once the goal
-lies beyond one CEM plan. Backward is strongest at offset $50$
-($+26$ points vs.\ Official). Forward is the better of the two unary
-maps at offsets $75$ and $100$. Fusion is the best mid-range mix
-($78\%$ and $50\%$ at offsets $50$ and $75$) and a small lift at
-offset $100$ ($18\%$ vs.\ $12\%$). Offset $100$ remains hard.
+Table~\ref{tab:pusht} reports PushT. At offset $25$ all four modes are
+at $82\%$. At longer offsets Backward reaches $70\%$ at $50$
+($+26$ vs.\ Official), Forward is stronger at $75$ and $100$, and
+Fusion is the best mid-range mix ($78\%$ and $50\%$ at $50$ and $75$),
+with $18\%$ at offset $100$ (Official $12\%$).
 
 Figure~\ref{fig:pusht-train} shows validation losses and latent norms.
 SIGReg is calm from epoch $0$. By epoch $9$, Forward and Backward
 outputs sit at about $13.0$ against encoder targets of about $13.8$,
-near the BatchNorm sphere $\sqrt{192}\approx 13.9$. On this task the
-imaginers can help while staying on the same scale as $E$.
+near the BatchNorm sphere $\sqrt{192}\approx 13.9$.
 
 \begin{figure}[t]
 \begin{center}
@@ -272,30 +294,22 @@ Fusion (avg05)  & 90 & 76 & 58 & 32 \\
 \begin{center}
 \includegraphics[width=\linewidth]{figures/fig_tworoom_success.png}
 \end{center}
-\caption{TwoRoom success (\%) vs.\ goal offset. Official LeWM uses
-$25$-step CEM. Forward, Backward, and Fusion (avg05) keep that CEM and
-change only the cost. Official is already strong at offset $25$ and
-drops once the goal lies beyond one horizon; Forward recovers
-long-offset success. Fusion does not beat Forward.}
+\caption{TwoRoom success (\%) vs.\ goal offset. Official, Forward,
+Backward, and Fusion (avg05) share 25-step CEM. Official is strong at
+offset $25$ and drops at longer offsets; Forward stays high. Fusion
+lies between Forward and Official.}
 \label{fig:tworoom-success}
 \end{figure}
 
-TwoRoom makes the horizon mismatch plain
-(Table~\ref{tab:tworoom}, Figure~\ref{fig:tworoom-success}). Official
-is already at $90\%$ for offset $25$, then $50/32/18$ at
-$50/75/100$. Forward matches Official at offset $25$---the same five
-episodes fail---and then stays at $90/84/66$. Relative to Official,
-that is $+40$, $+52$, and $+48$ points. At offset $50$, a paired
-count on the same starts is $21$ Official failures that Forward saves
-and one Official success that Forward loses. Backward is a small lift
-($+4$ to $+8$ points after offset $25$). Fusion sits between Forward
-and Official; averaging in Backward hurts here.
-
-This pattern is the opposite of ``the short-horizon controller is weak.''
-The short-horizon controller is fine. What fails is ranking 25-step
-plans against a goal that those plans cannot reach. Applying $\Fk$
-before the distance to $\zg$ is a longer view of the same candidates,
-not a new planner.
+On TwoRoom (Table~\ref{tab:tworoom}, Figure~\ref{fig:tworoom-success}),
+Official is at $90\%$ for offset $25$, then $50/32/18$ at
+$50/75/100$. Forward matches Official at offset $25$ (the same five
+episodes fail) and then stays at $90/84/66$: $+40$, $+52$, and
+$+48$ points. At offset $50$, on the same starts, Forward saves $21$
+Official failures and loses one Official success. Backward adds $+4$
+to $+8$ points after offset $25$. Fusion lies between Forward and
+Official. The 25-step CEM is already competent at short range; $\Fk$
+re-scores the same candidates against $\zg$ after $k$ imaginer steps.
 
 \begin{figure}[t]
 \begin{center}
@@ -303,41 +317,35 @@ not a new planner.
 \end{center}
 \caption{TwoRoom validation losses and latent norms, including epochs
 $0$--$1$. SIGReg spikes, then the encoder settles on the BatchNorm
-sphere. Forward and Backward \emph{outputs} remain at about $5.6$
-against targets of about $13.7$. Table~\ref{tab:tworoom} still holds:
-ranking can survive a scale gap.}
+sphere. Forward and Backward outputs remain at about $5.6$ against
+targets of about $13.7$.}
 \label{fig:tworoom-train}
 \end{figure}
 
-Figure~\ref{fig:tworoom-train} starts at epoch $0$. SIGReg is large in
-the first two epochs ($61.5$ then $51.2$) and then falls as the encoder
-moves onto the sphere; prediction MSE is not the quantity that
-``recovers.'' After that, $F$ and $B$ outputs stay near $5.6$ while
-their targets sit near $13.7$. We do not treat that gap as the cause of
-the TwoRoom Forward gain, and we do not treat the PushT alignment as a
-requirement either. Eval cost only has to order CEM samples.
-PushT shows that F/B can help when norms are aligned; TwoRoom shows that
-they can help when they are not. Neither plot is evidence that
-$\Fk(p)$ is a calibrated forecast of $z_{t+k}$.
+Figure~\ref{fig:tworoom-train} starts at epoch $0$. SIGReg is $61.5$
+then $51.2$ in the first two epochs, and then falls as the encoder
+moves onto the sphere. After that, $F$ and $B$ outputs stay near
+$5.6$ while their targets sit near $13.7$. CEM orders candidates by
+these imagined latents. On PushT the output norms stay near the
+encoder sphere; on TwoRoom they do not. Forward raises long-offset
+success in both cases.
 
-\subsection{Limitations of the present results}
+\subsection{Scope}
 \label{sec:limits}
 
-The study is two tasks, one checkpoint time, and unary $B\to z$. PushT
-at offset $100$ is still low. Fusion is not a universal improvement:
-it is best on PushT at mid range and worse than Forward on TwoRoom.
-We do not report other backward targets or further environments here.
+The reported runs are unary $B\to z$ on PushT and TwoRoom, at the
+epoch-10 checkpoint. Fusion is the best mid-range mix on PushT and
+lies below Forward on TwoRoom. PushT success at offset $100$ is
+$18\%$ under Fusion.
 
 \section{Conclusion}
 \label{sec:concl}
 
-FaBLeWM leaves Official LeWM's encoder, predictor, and 25-step CEM in
-place, and adds detached forward and backward imaginers that change how
-that CEM ranks plans. On PushT and TwoRoom, the effect shows up where
-it should: not at offset $25$, where $k{=}0$, but at longer offsets,
-where a short planner is asked to choose among plans that do not reach
-the goal. The working interpretation is a longer-range ranking signal,
-not a calibrated long-horizon latent model.
+FaBLeWM keeps Official LeWM's encoder, predictor, and 25-step CEM, and
+adds detached forward and backward imaginers that re-score those plans.
+On PushT and TwoRoom, Official and FaBLeWM match at offset $25$, where
+$k{=}0$, and FaBLeWM raises success at longer offsets, where CEM ranks
+25-step plans that do not reach the goal.
 
 \subsection*{AI use statement}
 
