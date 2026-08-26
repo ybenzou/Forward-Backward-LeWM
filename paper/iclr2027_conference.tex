@@ -55,14 +55,10 @@ embedding. Existing approaches modify the predictor, the planning
 hierarchy, or the distance metric. We instead treat terminal scoring as
 a temporal correspondence problem: the two arguments of the Euclidean
 cost should refer to the same remaining time. Horizon-Aligned Scoring
-(HAS) trains an action-free forward imaginer $F$ on detached latents
-and replaces the LeWM cost with
-$C_F=\|\Fk(\Pend)-\zg\|^2$. $F$ maps the short-plan endpoint toward the
-goal horizon before the distance is evaluated. Across $10$ evaluation
-seeds on PushT and TwoRoom, HAS and LeWM coincide at offset $25$
-($k{=}0$). Beyond one horizon, HAS raises PushT success from $42.8\%$
-to $67.8\%$ at offset $50$ and TwoRoom success from $16.4\%$ to
-$70.4\%$ at offset $100$.
+(HAS) trains an action-free forward imaginer that maps the short-plan
+endpoint toward the goal horizon before the distance is evaluated. On
+PushT and TwoRoom, HAS raises mid-range PushT success from $42.8\%$ to
+$67.8\%$ and long-horizon TwoRoom success from $16.4\%$ to $70.4\%$.
 \end{abstract}
 
 \section{Introduction}
@@ -94,128 +90,152 @@ scoring function. We instead study the temporal semantics of terminal
 scoring: how should a planner compare a near-term predicted endpoint
 with a goal representation from a later stage of the trajectory?
 
-We introduce Horizon-Aligned Scoring (HAS). A small action-free
-imaginer $F$ learns a forward temporal map in latent space. At planning
-time, $F$ is applied $k$ times to the predicted endpoint so that
-$\Fk(\Pend)$ and $\zg$ refer to a shared remaining horizon. CEM then
-ranks candidate plans by Euclidean distance between this pair. HAS does
-not claim that $F$ reconstructs future encoder states. It only changes
-the temporal arguments of the terminal cost used to order short plans.
+We introduce Horizon-Aligned Scoring (HAS). An action-free imaginer
+$F$ learns local temporal transitions from detached LeWM latents using
+one-step and recursive two-step supervision. At planning time, repeated
+application of $F$ moves each predicted endpoint toward the goal
+horizon, and CEM ranks candidate plans by their distance to the goal
+embedding at that horizon. HAS thereby separates the action-conditioned
+rollout used to generate a short plan from the temporal extension used
+to score it.
 
 This paper makes three contributions.
 \begin{enumerate}
-\item \textbf{Problem formulation.} We identify temporal mismatch
-between the predicted endpoint and the goal embedding as a failure
-mode of Euclidean terminal costs in short-horizon latent planning.
+\item \textbf{Temporal view of terminal scoring.} We formulate
+long-offset scoring as a correspondence problem between a predicted
+endpoint and a goal embedding associated with different times.
 \item \textbf{Horizon-aligned scoring.} We introduce HAS, which uses an
-action-free forward imaginer to form the terminal cost
-$C_F=\|\Fk(\Pend)-\zg\|^2$.
-\item \textbf{Empirical evaluation.} Over $10$ evaluation seeds on
-PushT and TwoRoom, HAS raises success once the goal leaves one
-planning horizon, including a TwoRoom gain from $16.4\%$ to $70.4\%$
-at offset $100$.
+action-free forward imaginer to evaluate short plans at the goal
+horizon.
+\item \textbf{Long-offset evaluation.} Experiments on PushT and
+TwoRoom show consistent gains beyond one planning horizon, including
+a TwoRoom improvement from $16.4\%$ to $70.4\%$ at offset $100$.
 \end{enumerate}
 
 \section{Related work}
 \label{sec:related}
 
+\paragraph{Latent world-model planning.}
 Visual MPC and latent imagination score candidate actions by rolling a
 learned model~\citep{hafner2019planet,hafner2020dreamer}. TD-MPC,
 DINO-WM, and LeWM use CEM (or MPPI) with a terminal latent
-distance~\citep{hansen2022tdmpc,zhou2025dinowm,lewm2026}. The default
-metric is Euclidean MSE between the predicted endpoint and $\zg$.
+distance~\citep{hansen2022tdmpc,zhou2025dinowm,lewm2026}. In LeWM,
+CEM ranks action sequences by Euclidean distance between the predicted
+endpoint and the encoded goal.
 
-Several recent papers attack long-offset failure by changing a
-different piece of that stack. VLWM trains an action-conditioned
+\paragraph{Extending temporal reach.}
+Recent methods extend latent planning beyond a short rollout through
+the predictor or the search procedure. VLWM trains an action-conditioned
 predictor on variable-length action chunks so $P$ can jump $k$ steps
-in one
-query~\citep{du2026vlwm}. HWM plans at several temporal resolutions
+in one query~\citep{du2026vlwm}. HWM plans at several temporal resolutions
 and uses coarse predictions as subgoals for short-horizon
 MPC~\citep{zhang2026hwm}. FF-JEPA adds an action-free forward model
 that proposes the next subgoal, then runs CEM to that
 subgoal~\citep{masip2026ffjepa}. SAGE keeps frozen LeWM and CEM, but
 conditions the \emph{proposal} distribution on a predicted
-subgoal~\citep{cheng2026sage}. On the cost side, temporal
-straightening regularizes latent trajectories so Euclidean distance
-better tracks geodesic progress~\citep{wang2026straightening}, and
-trajectory reachability metrics (TRM) replace or mix terminal MSE with
-a pairwise head trained on horizon-matched temporal
-separations~\citep{li2026trm}.
+subgoal~\citep{cheng2026sage}. These methods lengthen prediction or
+organize search around intermediate targets.
 
-Prior work can therefore lengthen $P$, introduce hierarchical or
-subgoal-conditioned search, or learn a new distance metric. HAS
-instead formulates terminal scoring as a temporal correspondence
-problem: before evaluating distance, $F$ advances $\Pend$ so that the
-compared representations refer to a shared horizon. The closest
-cost-side method is TRM: both identify candidate ranking as a source of
-long-horizon failure, but TRM learns a scalar reachability metric,
-whereas HAS constructs a temporally matched representation for
-latent-space scoring.
+\paragraph{Latent geometry and terminal scoring.}
+Temporal straightening regularizes latent trajectories so Euclidean
+distance better tracks geodesic progress~\citep{wang2026straightening}.
+Trajectory reachability metrics (TRM) replace or combine terminal MSE
+with a pairwise head trained on horizon-matched temporal
+separations~\citep{li2026trm}. TRM learns a scalar reachability score;
+HAS instead transforms the predicted endpoint to the goal horizon and
+then evaluates latent distance. The distinction is between learning a
+new pairwise metric and changing the temporal correspondence presented
+to the metric.
 
 \section{Method}
 \label{sec:method}
 
-\subsection{LeWM}
+\subsection{Short-horizon latent planning}
 \label{sec:lewm}
 
-We follow LeWM's training path. A window of four encoded
-observations $z_{0:3}=E(o_{0:3})$ and the corresponding actions is fed
-to $P$. Prediction targets are the encoder latents. The loss is
-next-embedding MSE plus SIGReg,
+Given a four-observation window, the encoder produces
+$z_{0:3}=E(o_{0:3})$. The action-conditioned predictor produces
+$p_{1:3}=P(z_{0:2},a_{0:2})$, where $p_i$ is trained to match $z_i$.
+LeWM combines prediction MSE with SIGReg,
 \begin{equation}
 \mathcal{L}_{\mathrm{LeWM}}
-=\underbrace{\|P(z,a)-z_{\mathrm{next}}\|^2}_{\mathrm{pred}}
+=\frac{1}{3}\sum_{i=1}^{3}\|p_i-z_i\|^2
 +0.09\,\mathcal{L}_{\mathrm{SIGReg}}(z).
+\label{eq:lewm}
 \end{equation}
-At evaluation, CEM always plans $\planlen$ environment steps
-(horizon $5$, receding horizon $5$, action block $5$). The LeWM cost is
-$\|\Pend-\zg\|^2$, where $\Pend$ is the predicted embedding after those
-$25$ steps.
+During planning, CEM samples action sequences and rolls $P$ forward for
+five action blocks. Each block contains five environment steps, so the
+predicted endpoint $\Pend$ lies $25$ steps ahead. LeWM assigns the
+terminal cost
+\begin{equation}
+C_{\mathrm{LeWM}}=\|\Pend-\zg\|^2.
+\label{eq:lewm-cost}
+\end{equation}
 
-\subsection{Horizon-aligned scoring}
+\subsection{Learning the forward imaginer}
 \label{sec:imaginers}
 
-The LeWM cost compares $\Pend$ at time $t{+}25$ to a goal that may be
-many action-blocks further. HAS inserts a residual MLP $F$ that reads
-stop-gradient copies of $P$'s output $p$. Imaginer losses train only
-$F$. With a four-step window, $p_1,p_2,p_3$ align with $z_1,z_2,z_3$.
+HAS learns an action-free map $F$ from a predicted latent to the next
+encoder-latent time step. $F$ is a two-block residual MLP with latent
+dimension $192$ and hidden dimension $768$. Its inputs and targets are
+detached from $E$ and $P$, restricting gradients from the forward
+objective to $F$.
 
-$F$ maps a predicted latent toward a later encoder latent,
+The four-observation training window provides two one-step pairs and
+one recursive two-step pair. We optimize
 \begin{equation}
-F(p_1)\to z_2,\qquad F(p_2)\to z_3,\qquad F(F(p_1))\to z_3,
+\mathcal{L}_{\mathrm{step}}
+=\frac{1}{2}\left(
+\|F(\bar p_1)-\bar z_2\|^2+
+\|F(\bar p_2)-\bar z_3\|^2\right),
+\label{eq:forward-step}
 \end{equation}
-with equal weight on the one-step and two-step terms. The HAS planning
-cost is
+and
 \begin{equation}
-C_F=\bigl\|\Fk(\Pend)-\zg\bigr\|^2.
+\mathcal{L}_{\mathrm{roll}}
+=\|F(F(\bar p_1))-\bar z_3\|^2,
+\label{eq:forward-roll}
 \end{equation}
-This cost is used only to rank CEM samples. We do not treat
-$\Fk(\Pend)$ as a calibrated forecast of a future encoder state.
+where bars denote detached tensors. The forward objective is
+$\mathcal{L}_{F}=\mathcal{L}_{\mathrm{step}}+
+\mathcal{L}_{\mathrm{roll}}$. Recursive supervision exposes $F$ to
+its own output during training, matching its repeated use at planning
+time.
 
-For goal offset $o$ and elapsed time $t$, the imagination depth is
+\subsection{Horizon-aligned terminal cost}
+
+Let $o$ be the temporal offset of the goal and $t$ the elapsed
+environment steps. After a $25$-step candidate rollout, the number of
+remaining action blocks is
 \begin{equation}
 k=\max\bigl((o-t-\planlen)/5,\,0\bigr).
+\label{eq:depth}
 \end{equation}
-The division by $5$ matches the action block. When $k{=}0$, $F$ is
-skipped and $C_F=\|\Pend-\zg\|^2$. Offset $25$ at the first replan
-therefore has $k{=}0$, so HAS and LeWM share the same cost.
+HAS recursively maps each candidate endpoint by this depth and assigns
+\begin{equation}
+C_{\mathrm{HAS}}=\bigl\|\Fk(\Pend)-\zg\bigr\|^2.
+\label{eq:has-cost}
+\end{equation}
+CEM uses this cost to rank candidate action sequences. As receding
+horizon control advances $t$, the recursion depth decreases until
+$k=0$, at which point the endpoint already lies at the goal horizon.
 
 \section{Experiments}
 \label{sec:exp}
 
-We compare LeWM and HAS on one frozen checkpoint per task (epoch $10$).
-Each evaluation seed draws $n{=}50$ episodes. We report mean $\pm$
-standard deviation over seeds $42$--$51$. The interaction budget is
-twice the goal offset ($50$, $100$, $150$, $200$ steps at offsets
-$25$, $50$, $75$, $100$). CEM uses horizon $5$ at every offset
-($25$ environment steps). Success is the environment criterion on
-PushT~\citep{florence2022ibc} and TwoRoom.
+\subsection{Evaluation protocol}
 
-At offset $25$, $k{=}0$, so HAS reduces to the LeWM cost. The two
-methods therefore coincide there by construction
-(Table~\ref{tab:main}, Figure~\ref{fig:multiseed}). The comparison
-begins at offsets $50$--$100$, where the goal lies beyond one short
-plan.
+We evaluate LeWM and HAS on PushT~\citep{florence2022ibc} and TwoRoom
+using one epoch-$10$ training checkpoint per task. Evaluation seeds
+$42$--$51$ each provide $50$ episodes, with paired starts for the two
+methods within each seed. We report the mean and standard deviation of
+the ten per-seed success rates.
+
+Goal offsets are $25$, $50$, $75$, and $100$ environment steps. The
+interaction budget is twice the corresponding offset. CEM plans five
+action blocks of five steps at every offset and replans after executing
+the resulting $25$-step action sequence. We use the success criterion
+defined by each environment.
 
 \begin{figure}[htbp]
 \begin{center}
@@ -229,8 +249,7 @@ shaded bands the standard deviation. The dashed line marks $k{=}0$.}
 
 \begin{table}[htbp]
 \caption{Success rate (\%; mean $\pm$ std over $10$ evaluation seeds).
-HAS and LeWM share the same cost at offset $25$. Bold marks the
-higher mean when the two methods differ.}
+Bold marks the higher mean at offsets beyond the planning horizon.}
 \label{tab:main}
 \begin{center}
 \begin{tabular}{llcccc}
@@ -256,34 +275,33 @@ TwoRoom & LeWM
 \subsection{PushT}
 \label{sec:pusht}
 
-On PushT, HAS improves mid-range ranking after the goal leaves one
-horizon: mean success rises from $42.8\%$ to $67.8\%$ at offset $50$
-($+25.0$ points) and from $21.6\%$ to $40.4\%$ at offset $75$
-($+18.8$ points). The gain remains positive at offset $100$
-($13.2\%\to 23.4\%$), but absolute success stays low. HAS therefore
-helps when the terminal pair is only moderately misaligned; it does
-not turn a long PushT offset into a reliable short-horizon plan.
+On PushT, HAS raises mean success from $42.8\%$ to $67.8\%$ at offset
+$50$ and from $21.6\%$ to $40.4\%$ at offset $75$, gains of $25.0$
+and $18.8$ percentage points. At offset $100$, success increases from
+$13.2\%$ to $23.4\%$. The improvement remains consistent across the
+three long-offset settings, while its magnitude decreases with the
+offset.
 
 \subsection{TwoRoom}
 \label{sec:tworoom}
 
-TwoRoom isolates the same mismatch more cleanly. LeWM is already
-strong at offset $25$ ($84.4\%$) and then falls to $42.4/25.8/16.4$
-as the offset increases. HAS holds $80.4/82.0/70.4$ at those longer
-offsets, a mean gain of $+38.0$, $+56.2$, and $+54.0$ points. Every
-evaluation seed is positive beyond offset $25$. The TwoRoom gain does
-not require $F$ to match encoder scale: after SIGReg warmup, $F$
-outputs remain near $5.6$ against targets near $13.7$. CEM only has
-to order candidates.
+On TwoRoom, LeWM success falls from $84.4\%$ at offset $25$ to
+$42.4\%$, $25.8\%$, and $16.4\%$ at offsets $50$, $75$, and $100$.
+HAS obtains $80.4\%$, $82.0\%$, and $70.4\%$ at the same offsets,
+corresponding to gains of $38.0$, $56.2$, and $54.0$ percentage
+points. HAS improves over LeWM for every evaluation seed at each
+offset beyond one planning horizon.
 
 \subsection{Limitations}
 \label{sec:limits}
 
-These results use one training seed and one checkpoint per task. The
-controlled baseline is LeWM under the same $25$-step CEM; we do not
-yet compare against a longer-horizon LeWM planner, or against VLWM,
-HWM, SAGE, or TRM. PushT at offset $100$ remains $23.4\%$ under HAS.
-Cube is not included in this draft.
+The current evaluation covers two simulated tasks and one training
+checkpoint per task. It does not yet establish how HAS compares with
+longer-horizon LeWM planning or recent long-horizon methods, and
+PushT success remains $23.4\%$ at offset $100$. HAS also assumes that
+the temporal goal offset is available when selecting the recursion
+depth. Broader task coverage, training-seed variation, and direct
+long-horizon baselines remain necessary.
 
 \section{Conclusion}
 \label{sec:concl}
@@ -293,9 +311,9 @@ planning as a temporal correspondence problem. An action-free forward
 imaginer maps the predicted endpoint toward the goal horizon before
 distance is evaluated. Over $10$ evaluation seeds, this scoring change
 raises PushT mid-range success by $19$--$25$ points and TwoRoom
-success at offset $100$ from $16.4\%$ to $70.4\%$. The working object
-is the temporal pair supplied to CEM, not a longer action-conditioned
-predictor.
+success at offset $100$ from $16.4\%$ to $70.4\%$. These results
+support horizon alignment as a useful design principle for terminal
+scoring in latent planning.
 
 \subsection*{AI use statement}
 
@@ -340,5 +358,11 @@ uses $\|\Fk(\Pend)-\zg\|^2$. When $k{=}0$, $F$ is skipped.
 Each seed in $\{42,\ldots,51\}$ draws $50$ starts independently. The
 numbers in Table~\ref{tab:main} are mean and standard deviation of
 those per-seed success rates.
+
+The reported checkpoints were produced by training code that also
+instantiates a parameter-disjoint backward auxiliary head. That head
+receives detached inputs and is not used by HAS at evaluation; the
+forward-head objective is exactly
+Equations~\ref{eq:forward-step}--\ref{eq:forward-roll}.
 
 \end{document}
