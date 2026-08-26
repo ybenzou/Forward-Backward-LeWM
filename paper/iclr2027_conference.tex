@@ -10,11 +10,12 @@
 
 % Figures/tables only; do not edit iclr2027_conference.sty.
 \usepackage{graphicx}
+\usepackage{booktabs}
 \usepackage[section]{placeins}
 \input{macros.tex}
 
 
-\title{FaBLeWM: A Longer View for\\
+\title{Horizon-Aligned Scoring: A Longer View for\\
 Short-Horizon World-Model Planning}
 
 % Authors must not appear in the submitted version. They should be hidden
@@ -49,20 +50,19 @@ Latent world models plan by scoring imagined rollouts against a goal
 embedding. LeWorldModel (LeWM) trains on a short window of four images
 and uses the short-horizon Cross-Entropy Method (CEM) with a Euclidean
 terminal cost. When the goal lies beyond one planning horizon, this
-cost compares a near-term predicted latent with the embedding of a
-still-distant goal. Existing approaches modify the predictor, planning
-hierarchy, or distance metric. We study a complementary intervention:
-addressing temporal mismatch in short-horizon terminal scoring. Our key
-idea is to align
-the two arguments of the Euclidean cost in time. We introduce FaBLeWM
-(Forward and Backward LeWM), which trains two action-free imaginers,
-$\Iforward$ and $\Ibackward$, on detached latents. $\Iforward$ maps the
-short-plan endpoint toward the goal horizon, whereas $\Ibackward$ maps
-the goal embedding toward the endpoint horizon. These transformations
-yield terminal costs defined between temporally matched
-representations. On PushT and TwoRoom, FaBLeWM improves mid-range
-success by $28$--$52$ percentage points over LeWM and raises
-long-horizon TwoRoom success from $18\%$ to $66\%$.
+cost compares a near-term predicted latent with a still-distant goal
+embedding. Existing approaches modify the predictor, the planning
+hierarchy, or the distance metric. We instead treat terminal scoring as
+a temporal correspondence problem: the two arguments of the Euclidean
+cost should refer to the same remaining time. Horizon-Aligned Scoring
+(HAS) trains an action-free forward imaginer $F$ on detached latents
+and replaces the LeWM cost with
+$C_F=\|\Fk(\Pend)-\zg\|^2$. $F$ maps the short-plan endpoint toward the
+goal horizon before the distance is evaluated. Across $10$ evaluation
+seeds on PushT and TwoRoom, HAS and LeWM coincide at offset $25$
+($k{=}0$). Beyond one horizon, HAS raises PushT success from $42.8\%$
+to $67.8\%$ at offset $50$ and TwoRoom success from $16.4\%$ to
+$70.4\%$ at offset $100$.
 \end{abstract}
 
 \section{Introduction}
@@ -94,26 +94,26 @@ scoring function. We instead study the temporal semantics of terminal
 scoring: how should a planner compare a near-term predicted endpoint
 with a goal representation from a later stage of the trajectory?
 
-We introduce FaBLeWM (Forward and Backward LeWM). Two small
-action-free imaginers learn complementary temporal transformations in
-latent space. At planning time, $\Iforward$ maps the predicted endpoint
-toward the goal horizon, while $\Ibackward$ maps $\zg$ toward the
-endpoint horizon. The resulting forward and backward costs can be used
-separately or averaged. In both directions, candidate plans are scored
-between representations at a matched temporal horizon rather than
-between different stages of the trajectory.
+We introduce Horizon-Aligned Scoring (HAS). A small action-free
+imaginer $F$ learns a forward temporal map in latent space. At planning
+time, $F$ is applied $k$ times to the predicted endpoint so that
+$\Fk(\Pend)$ and $\zg$ refer to a shared remaining horizon. CEM then
+ranks candidate plans by Euclidean distance between this pair. HAS does
+not claim that $F$ reconstructs future encoder states. It only changes
+the temporal arguments of the terminal cost used to order short plans.
 
 This paper makes three contributions.
 \begin{enumerate}
 \item \textbf{Problem formulation.} We identify temporal mismatch
-between the predicted endpoint and goal embedding as a failure mode of
-Euclidean terminal costs in short-horizon latent planning.
-\item \textbf{Horizon-matched terminal costs.} We introduce FaBLeWM,
-which uses forward and backward action-free imaginers to align the
-terminal-cost arguments in latent space.
-\item \textbf{Empirical evaluation.} On PushT and TwoRoom, FaBLeWM
-improves mid-range success by $28$--$52$ percentage points over LeWM;
-on TwoRoom, it raises long-horizon success from $18\%$ to $66\%$.
+between the predicted endpoint and the goal embedding as a failure
+mode of Euclidean terminal costs in short-horizon latent planning.
+\item \textbf{Horizon-aligned scoring.} We introduce HAS, which uses an
+action-free forward imaginer to form the terminal cost
+$C_F=\|\Fk(\Pend)-\zg\|^2$.
+\item \textbf{Empirical evaluation.} Over $10$ evaluation seeds on
+PushT and TwoRoom, HAS raises success once the goal leaves one
+planning horizon, including a TwoRoom gain from $16.4\%$ to $70.4\%$
+at offset $100$.
 \end{enumerate}
 
 \section{Related work}
@@ -143,14 +143,14 @@ a pairwise head trained on horizon-matched temporal
 separations~\citep{li2026trm}.
 
 Prior work can therefore lengthen $P$, introduce hierarchical or
-subgoal-conditioned search, or learn a new distance metric. FaBLeWM
+subgoal-conditioned search, or learn a new distance metric. HAS
 instead formulates terminal scoring as a temporal correspondence
-problem: before evaluating distance, $F$ advances $\Pend$ and $B$
-rewinds $\zg$ so that the compared representations refer to a shared
-horizon. The closest cost-side method is TRM: both identify candidate
-ranking as a source of long-horizon failure, but TRM learns a scalar
-reachability metric, whereas FaBLeWM constructs temporally matched
-representations for latent-space scoring.
+problem: before evaluating distance, $F$ advances $\Pend$ so that the
+compared representations refer to a shared horizon. The closest
+cost-side method is TRM: both identify candidate ranking as a source of
+long-horizon failure, but TRM learns a scalar reachability metric,
+whereas HAS constructs a temporally matched representation for
+latent-space scoring.
 
 \section{Method}
 \label{sec:method}
@@ -172,177 +172,130 @@ At evaluation, CEM always plans $\planlen$ environment steps
 $\|\Pend-\zg\|^2$, where $\Pend$ is the predicted embedding after those
 $25$ steps.
 
-\subsection{Horizon-matched terminal cost}
+\subsection{Horizon-aligned scoring}
 \label{sec:imaginers}
 
-The LeWM cost compares $\Pend$ at time $t{+}25$ to a goal that may
-be many action-blocks further. FaBLeWM inserts two residual MLPs on a
-single latent, $F$ and $B$, that read stop-gradient copies of $z$ and
-of $P$'s output $p$. Imaginer losses train only $F$ and $B$. With a
-four-step window, $p_1,p_2,p_3$ align with $z_1,z_2,z_3$.
+The LeWM cost compares $\Pend$ at time $t{+}25$ to a goal that may be
+many action-blocks further. HAS inserts a residual MLP $F$ that reads
+stop-gradient copies of $P$'s output $p$. Imaginer losses train only
+$F$. With a four-step window, $p_1,p_2,p_3$ align with $z_1,z_2,z_3$.
 
-\paragraph{Forward.}
-$F$ maps a predicted latent to a later encoder latent,
+$F$ maps a predicted latent toward a later encoder latent,
 \begin{equation}
 F(p_1)\to z_2,\qquad F(p_2)\to z_3,\qquad F(F(p_1))\to z_3,
 \end{equation}
-with equal weight on the one-step and two-step terms. The Forward
-planning cost is
+with equal weight on the one-step and two-step terms. The HAS planning
+cost is
 \begin{equation}
 C_F=\bigl\|\Fk(\Pend)-\zg\bigr\|^2.
 \end{equation}
+This cost is used only to rank CEM samples. We do not treat
+$\Fk(\Pend)$ as a calibrated forecast of a future encoder state.
 
-\paragraph{Backward.}
-Unary Backward maps encoder latents, $B(z)\to z$:
-\begin{equation}
-B(z_3)\to z_2,\qquad B(z_2)\to z_1,\qquad B(B(z_3))\to z_1.
-\end{equation}
-The Backward planning cost is
-\begin{equation}
-C_B=\bigl\|\Pend-\Bk(\zg)\bigr\|^2.
-\end{equation}
-
-\paragraph{Imagination depth.}
-For goal offset $o$ and elapsed time $t$,
+For goal offset $o$ and elapsed time $t$, the imagination depth is
 \begin{equation}
 k=\max\bigl((o-t-\planlen)/5,\,0\bigr).
 \end{equation}
-The division by $5$ matches the action block. When $k{=}0$, $F$ and
-$B$ are skipped and $C_F=C_B=\|\Pend-\zg\|^2$. Offset $25$ at the
-first replan has $k{=}0$, so LeWM, Forward, Backward, and Fusion
-share the same cost.
-
-\paragraph{Fusion.}
-Fusion averages the two costs, $C=0.5\,C_F+0.5\,C_B$. CEM, the action
-space, and the 25-step horizon are shared by all four modes.
+The division by $5$ matches the action block. When $k{=}0$, $F$ is
+skipped and $C_F=\|\Pend-\zg\|^2$. Offset $25$ at the first replan
+therefore has $k{=}0$, so HAS and LeWM share the same cost.
 
 \section{Experiments}
 \label{sec:exp}
 
-We compare four costs on one frozen joint-trained checkpoint per task:
-LeWM, Forward, Backward, and Fusion ($0.5\,C_F+0.5\,C_B$). Each
-task uses $n{=}50$ episodes, evaluation seed $42$, shared start
-states, and the epoch-10 weights. The interaction budget is twice the
-goal offset ($50$, $100$, $150$, $200$ steps at offsets $25$, $50$,
-$75$, $100$). CEM horizon is $5$ at every offset
-($25$ environment steps). Success is the environment criterion.
-PushT~\citep{florence2022ibc} and TwoRoom both use unary $B\to z$.
+We compare LeWM and HAS on one frozen checkpoint per task (epoch $10$).
+Each evaluation seed draws $n{=}50$ episodes. We report mean $\pm$
+standard deviation over seeds $42$--$51$. The interaction budget is
+twice the goal offset ($50$, $100$, $150$, $200$ steps at offsets
+$25$, $50$, $75$, $100$). CEM uses horizon $5$ at every offset
+($25$ environment steps). Success is the environment criterion on
+PushT~\citep{florence2022ibc} and TwoRoom.
+
+At offset $25$, $k{=}0$, so HAS reduces to the LeWM cost. The two
+methods therefore coincide there by construction
+(Table~\ref{tab:main}, Figure~\ref{fig:multiseed}). The comparison
+begins at offsets $50$--$100$, where the goal lies beyond one short
+plan.
+
+\begin{figure}[htbp]
+\begin{center}
+\includegraphics[width=0.98\linewidth]{figures/fig_iclr_multiseed.png}
+\end{center}
+\caption{Success rate versus goal offset on PushT and TwoRoom. Points
+are per-seed rates ($n{=}50$); lines show the $10$-seed mean and
+shaded bands the standard deviation. The dashed line marks $k{=}0$.}
+\label{fig:multiseed}
+\end{figure}
+
+\begin{table}[htbp]
+\caption{Success rate (\%; mean $\pm$ std over $10$ evaluation seeds).
+HAS and LeWM share the same cost at offset $25$. Bold marks the
+higher mean when the two methods differ.}
+\label{tab:main}
+\begin{center}
+\begin{tabular}{llcccc}
+\toprule
+Task & Method & $25$ & $50$ & $75$ & $100$ \\
+\midrule
+PushT & LeWM
+  & $87.2{\pm}3.6$ & $42.8{\pm}6.0$ & $21.6{\pm}7.4$ & $13.2{\pm}4.0$ \\
+ & HAS
+  & $87.0{\pm}3.8$ & $\mathbf{67.8{\pm}5.8}$ & $\mathbf{40.4{\pm}4.2}$
+  & $\mathbf{23.4{\pm}6.7}$ \\
+\midrule
+TwoRoom & LeWM
+  & $84.4{\pm}4.8$ & $42.4{\pm}5.5$ & $25.8{\pm}8.3$ & $16.4{\pm}6.0$ \\
+ & HAS
+  & $84.4{\pm}4.8$ & $\mathbf{80.4{\pm}5.3}$ & $\mathbf{82.0{\pm}6.1}$
+  & $\mathbf{70.4{\pm}7.2}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
 
 \subsection{PushT}
 \label{sec:pusht}
 
-On PushT, the four costs coincide at offset $25$; beyond one horizon,
-horizon-matched costs raise success, with Backward strongest at offset
-$50$ and Forward at $75$--$100$ (Table~\ref{tab:pusht}).
-
-\begin{table}[htbp]
-\caption{PushT success (\%). Same $50$ starts and 25-step CEM at every
-offset. Modes match at offset $25$ ($k{=}0$). Fusion is best at
-offsets $50$ and $75$; Forward is best at $100$.}
-\label{tab:pusht}
-\begin{center}
-\begin{tabular}{lcccc}
-Mode & 25 & 50 & 75 & 100 \\
-\hline \\
-LeWM            & 82 & 44 & 22 & 12 \\
-Forward         & 82 & 62 & 42 & 28 \\
-Backward        & 82 & 70 & 34 & 10 \\
-Fusion          & 82 & 78 & 50 & 18 \\
-\end{tabular}
-\end{center}
-\end{table}
-
-Figure~\ref{fig:pusht-train} is a training diagnostic: SIGReg is calm
-from epoch $0$, and by epoch $9$ the imaginer outputs sit near the
-encoder BatchNorm sphere ($\Vert z\Vert\approx\sqrt{192}\approx 13.9$).
-
-\begin{figure}[htbp]
-\begin{center}
-\includegraphics[width=0.98\linewidth]{figures/fig_pusht_train.png}
-\end{center}
-\caption{PushT: LeWM loss stays well-behaved, and $F$/$B$ output
-norms remain near the encoder sphere. Horizon-matched CEM still helps
-on this task (Table~\ref{tab:pusht}).}
-\label{fig:pusht-train}
-\end{figure}
-
-\FloatBarrier
+On PushT, HAS improves mid-range ranking after the goal leaves one
+horizon: mean success rises from $42.8\%$ to $67.8\%$ at offset $50$
+($+25.0$ points) and from $21.6\%$ to $40.4\%$ at offset $75$
+($+18.8$ points). The gain remains positive at offset $100$
+($13.2\%\to 23.4\%$), but absolute success stays low. HAS therefore
+helps when the terminal pair is only moderately misaligned; it does
+not turn a long PushT offset into a reliable short-horizon plan.
 
 \subsection{TwoRoom}
 \label{sec:tworoom}
 
-LeWM is already strong at offset $25$ and collapses once the
-goal leaves one CEM horizon; Forward recovers that long-offset regime
-by aligning the terminal-cost horizon (Table~\ref{tab:tworoom},
-Figure~\ref{fig:tworoom-success}). At offset $50$, Forward saves $21$
-LeWM failures and loses one success on the same starts. LeWM
-and Forward fail the same five episodes at offset $25$. Fusion lies
-between Forward and LeWM.
-
-\begin{table}[htbp]
-\caption{TwoRoom success (\%). Same $50$ starts and 25-step CEM.
-LeWM $90\to 50/32/18$ at offsets $25\to 50/75/100$; Forward
-$90/90/84/66$.}
-\label{tab:tworoom}
-\begin{center}
-\begin{tabular}{lcccc}
-Mode & 25 & 50 & 75 & 100 \\
-\hline \\
-LeWM            & 90 & 50 & 32 & 18 \\
-Forward         & 90 & 90 & 84 & 66 \\
-Backward        & 92 & 54 & 40 & 24 \\
-Fusion          & 90 & 76 & 58 & 32 \\
-\end{tabular}
-\end{center}
-\end{table}
-
-\begin{figure}[htbp]
-\begin{center}
-\includegraphics[width=0.98\linewidth]{figures/fig_tworoom_success.png}
-\end{center}
-\caption{TwoRoom: LeWM drops as soon as the goal leaves one 25-step
-plan. Forward maintains high success as the goal offset increases.
-Fusion lies between Forward and LeWM.}
-\label{fig:tworoom-success}
-\end{figure}
-
-Figure~\ref{fig:tworoom-train} shows that this gain does not require
-$F$/$B$ to match encoder scale. SIGReg is $61.5$ then $51.2$ in the
-first two epochs, then falls as $E$ settles on the sphere; imaginer
+TwoRoom isolates the same mismatch more cleanly. LeWM is already
+strong at offset $25$ ($84.4\%$) and then falls to $42.4/25.8/16.4$
+as the offset increases. HAS holds $80.4/82.0/70.4$ at those longer
+offsets, a mean gain of $+38.0$, $+56.2$, and $+54.0$ points. Every
+evaluation seed is positive beyond offset $25$. The TwoRoom gain does
+not require $F$ to match encoder scale: after SIGReg warmup, $F$
 outputs remain near $5.6$ against targets near $13.7$. CEM only has
-to order candidates. The same Forward cost helps on PushT, where
-norms \emph{are} aligned.
-
-\begin{figure}[htbp]
-\begin{center}
-\includegraphics[width=0.98\linewidth]{figures/fig_tworoom_train.png}
-\end{center}
-\caption{TwoRoom training from epoch $0$. After SIGReg warmup, $F$/$B$
-outputs stay below the encoder sphere. Table~\ref{tab:tworoom} still
-improves: the cost is used to rank CEM samples.}
-\label{fig:tworoom-train}
-\end{figure}
-
-\FloatBarrier
+to order candidates.
 
 \subsection{Limitations}
 \label{sec:limits}
 
-Results are unary $B\to z$ on two tasks at one checkpoint time. Fusion
-is the best mid-range mix on PushT and worse than Forward on TwoRoom.
-PushT at offset $100$ remains $18\%$ under Fusion. We do not compare
-head-to-head with VLWM, HWM, SAGE, or TRM in this draft; LeWM
-is the controlled baseline (same $E$, $P$, CEM, starts).
+These results use one training seed and one checkpoint per task. The
+controlled baseline is LeWM under the same $25$-step CEM; we do not
+yet compare against a longer-horizon LeWM planner, or against VLWM,
+HWM, SAGE, or TRM. PushT at offset $100$ remains $23.4\%$ under HAS.
+Cube is not included in this draft.
 
 \section{Conclusion}
 \label{sec:concl}
 
-FaBLeWM formulates terminal scoring as temporal alignment in latent
-space. Its forward and backward imaginers transform the predicted
-endpoint and goal embedding toward a shared horizon before evaluating
-their distance. On TwoRoom, Forward sustains success of $90/84/66$ as
-the goal offset increases, while LeWM drops to $50/32/18$. On PushT,
-the same temporal alignment improves success at mid-range offsets.
+HAS treats the Euclidean terminal cost of short-horizon latent
+planning as a temporal correspondence problem. An action-free forward
+imaginer maps the predicted endpoint toward the goal horizon before
+distance is evaluated. Over $10$ evaluation seeds, this scoring change
+raises PushT mid-range success by $19$--$25$ points and TwoRoom
+success at offset $100$ from $16.4\%$ to $70.4\%$. The working object
+is the temporal pair supplied to CEM, not a longer action-conditioned
+predictor.
 
 \subsection*{AI use statement}
 
@@ -363,13 +316,12 @@ remove: the methods are evaluated in standard simulation benchmarks.
 
 \subsection*{Reproducibility statement}
 
-Section~\ref{sec:exp} states the evaluation protocol: $n{=}50$
-episodes, interaction budget $2\times$ the goal offset, seed
-$42$, shared starts within each task, epoch-10 checkpoints, and CEM
-horizon $5$ at every offset. Training losses and the imagination depth
-$k$ are given in Section~\ref{sec:method}. Configurations and scripts
-used to produce Tables~\ref{tab:pusht}--\ref{tab:tworoom} will be
-included with the code release.
+Section~\ref{sec:exp} states the evaluation protocol: $10$ evaluation
+seeds ($42$--$51$), $n{=}50$ episodes per seed, interaction budget
+$2\times$ the goal offset, epoch-10 checkpoints, and CEM horizon $5$
+at every offset. Training losses and the imagination depth $k$ are
+given in Section~\ref{sec:method}. Configurations and scripts used to
+produce Table~\ref{tab:main} will be included with the code release.
 
 
 \bibliography{iclr2027_conference}
@@ -381,18 +333,12 @@ included with the code release.
 
 CEM uses \texttt{horizon=5}, \texttt{receding=5}, and
 \texttt{action\_block=5}, so one plan is $\planlen$ environment steps.
-The evaluation budget is $2\times$ the goal offset. Imagination depth is $k=\max((o-t-25)/5,\,0)$. The LeWM cost is
-$\|\Pend-\zg\|^2$; Forward is $\|\Fk(\Pend)-\zg\|^2$; unary Backward is
-$\|\Pend-\Bk(\zg)\|^2$; Fusion (avg05) is the mean of the last two.
-When $k{=}0$, Forward and Backward are skipped.
+The evaluation budget is $2\times$ the goal offset. Imagination depth
+is $k=\max((o-t-25)/5,\,0)$. The LeWM cost is $\|\Pend-\zg\|^2$; HAS
+uses $\|\Fk(\Pend)-\zg\|^2$. When $k{=}0$, $F$ is skipped.
 
-PushT starts hash:
-\texttt{9d47d5e78eb0b98693bdb739e6e107fca7b52a7fa5d38189e418c242d7d2a703}.
-TwoRoom starts hash:
-\texttt{55d795562181c8f5eb12def43fb995cedd0d45c909fd1f39e38518155e16ad80}.
-
-On TwoRoom at offset $50$, Forward vs.\ LeWM on the same $50$
-starts: $21$ episodes saved, $1$ lost. LeWM and Forward at offset
-$25$ fail on the same five episodes.
+Each seed in $\{42,\ldots,51\}$ draws $50$ starts independently. The
+numbers in Table~\ref{tab:main} are mean and standard deviation of
+those per-seed success rates.
 
 \end{document}
