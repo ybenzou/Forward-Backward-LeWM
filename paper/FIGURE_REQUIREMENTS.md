@@ -56,22 +56,28 @@ the terminal distance.
 - No task screenshot is required; small PushT or TwoRoom thumbnails may be
   added only as visual context.
 
-## Figure 2: Forward training and HAS planning
+## Figure 2: LeWM and Forward training
 
 ### Purpose
 
-Connect the detached local supervision used to train \(F\) with its recursive
-use inside the planning cost.
+Contrast the ordinary LeWM prediction objective with the detached local
+supervision used to train the action-free Forward imaginer.
 
 ### Layout
 
-Use two panels.
+Use two vertically stacked panels so the labels remain readable at the
+single-column text width.
 
-#### Panel (a): Training
+#### Panel (a): LeWM training
 
 - Show four encoder latents \(z_0,z_1,z_2,z_3\).
 - Show LeWM predictions \(p_0,p_1,p_2\), aligned as
   \(p_i\approx z_{i+1}\).
+- Show that the causal predictor receives latent context and action blocks.
+- Route predictions and encoder targets to \(\mathcal{L}_{\mathrm{LeWM}}\).
+
+#### Panel (b): Forward training
+
 - Highlight only the Forward pairs used by the legacy latent variant:
   - \(F(\bar p_0)\rightarrow\bar z_2\)
   - \(F(\bar p_1)\rightarrow\bar z_3\)
@@ -80,22 +86,11 @@ Use two panels.
 - Distinguish the one-step and recursive losses by line style.
 - State “action-free” next to \(F\); do not draw action inputs into \(F\).
 
-#### Panel (b): Planning
-
-- Start with \(N\) CEM candidate action-block sequences.
-- Route each candidate through five action-conditioned predictor transitions
-  to obtain \(\hat z^{(n)}_{e+25}\).
-- Route each endpoint through a shared \(F\) recursively \(k(e,o)\) times.
-- Compute the squared latent distance to the single encoded goal \(z_g\).
-- Feed candidate costs back to the CEM elite update.
-- Add a small depth schedule example for offset \(100\):
-  \(15\rightarrow10\rightarrow5\rightarrow0\) across replans.
-
 ### Caption message
 
-The Forward imaginer is trained from detached local LeWM alignments, including
-one recursive composition. At evaluation it extends each candidate endpoint
-to the goal horizon for terminal ranking.
+LeWM matches each action-conditioned prediction with the next encoder latent.
+The Forward imaginer is trained from detached local LeWM alignments using two
+one-step pairs and one recursive composition.
 
 ### Claims the figure must not imply
 
@@ -105,26 +100,24 @@ to the goal horizon for terminal ranking.
 - Do not imply that \(F\) receives candidate actions.
 - Do not present the two-step training loss as evidence of accurate
   fifteen-step open-loop prediction.
-- Do not show the Forward trajectory as a subgoal sequence executed by the
-  controller.
 
 ### Source material
 
 - Architecture: two residual MLP blocks, latent width \(192\), hidden width
   \(768\), GELU, output LayerNorm and linear projection.
 - Losses: `eq:forward-step`, `eq:forward-roll`, and `eq:forward-total`.
-- Planning depth and cost: `eq:depth` and `eq:has-cost`.
-- CEM: 300 candidates, 30 update iterations, 30 elites, variance scale 1.0.
 
 ## Rendering and delivery
 
 - Design for single-column legibility first; Figure 2 may span two columns if
   labels become crowded.
-- Use vector output (`.pdf` preferred) and embed fonts.
+- Keep the author-provided Draw.io files as editable sources.
+- Insert their exported vector PDFs in LaTeX; retain SVG copies for future
+  editing.
 - Match the paper typography; equations should use LaTeX-rendered symbols.
 - Avoid gradients, decorative 3D effects, and dense prose inside the figure.
 - Final deliverables:
-  - `paper/figures/fig_has_temporal_alignment.pdf`
-  - `paper/figures/fig_has_training_planning.pdf`
+  - `paper/figures/fig_has_evaluation.pdf`
+  - `paper/figures/fig_has_training.pdf`
 - Replace the boxed placeholders in the manuscript with `\includegraphics`
   while preserving the existing labels `fig:overview` and `fig:method`.
