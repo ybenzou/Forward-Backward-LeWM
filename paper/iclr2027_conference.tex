@@ -8,6 +8,8 @@
 \usepackage{hyperref}
 \usepackage{url}
 \usepackage{amsmath,amssymb}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
 
 % Figures/tables only; do not edit iclr2027_conference.sty.
 \usepackage{graphicx}
@@ -58,8 +60,9 @@ transitions and recursively applies it to the predicted endpoint before
 computing the terminal distance. The recursion depth decreases as
 receding-horizon control approaches the goal time. On PushT and TwoRoom,
 HAS improves success at every evaluated offset beyond the planning
-horizon. It raises PushT success from $42.8\%$ to $67.8\%$ at offset
-$50$, and TwoRoom success from $16.4\%$ to $70.4\%$ at offset $100$.
+horizon and outperforms LeWM with a doubled CEM horizon. It raises
+PushT success from $42.8\%$ to $67.8\%$ at offset $50$, and TwoRoom
+success from $16.4\%$ to $70.4\%$ at offset $100$.
 \end{abstract}
 
 \section{Introduction}
@@ -126,9 +129,11 @@ goal offsets on PushT and TwoRoom. HAS matches LeWM within evaluation
 variation at the $25$-step horizon and improves mean success at all
 tested offsets beyond it. At offset $100$, TwoRoom success rises by
 $54.0$ percentage points; on PushT, the largest gain is $25.0$ points
-at offset $50$. These results support horizon alignment as a useful
-scoring operation in the tested LeWM setting. Prediction and
-representation errors remain separate sources of planning error.
+at offset $50$. A LeWM baseline with twice the CEM horizon remains
+below HAS at every offset on both tasks. These results support horizon
+alignment as a useful scoring operation in the tested LeWM setting.
+Prediction and representation errors remain separate sources of
+planning error.
 
 The paper makes three contributions:
 \begin{enumerate}
@@ -139,8 +144,8 @@ goal.
 Forward imaginer with detached one-step and recursive supervision, then
 uses it to align candidate endpoints with the goal horizon.
 \item We evaluate HAS over ten paired evaluation seeds on two visual
-control tasks and find consistent gains beyond the $25$-step planning
-horizon.
+control tasks, including a LeWM baseline with a doubled CEM horizon, and
+find consistent gains beyond the $25$-step planning horizon.
 \end{enumerate}
 
 \section{Related work}
@@ -339,27 +344,45 @@ current action-conditioned candidates.
 \subsection{Receding-horizon planning}
 \label{sec:planning}
 
-For each replanning step, CEM maintains a distribution over five action
-blocks. It samples candidates, obtains their endpoints with $P$, applies
-$F^{k(e,o)}$ to every endpoint, and updates the distribution using the
-candidates with lowest HAS cost. After the final CEM iteration, the
-selected $25$-step action sequence is executed and the procedure repeats
-from the new observation. The depth is recomputed from elapsed time. For
-example, an offset-$100$ episode uses depths $15$, $10$, $5$, and $0$
-at elapsed times $0$, $25$, $50$, and $75$.
+At each replanning step, CEM optimizes a diagonal Gaussian distribution
+over $m$ action blocks using Algorithm~\ref{alg:has-cem}. Each iteration
+evaluates $N$ candidates, retains the $M$ candidates with lowest HAS
+cost, and fits the next distribution to their empirical moments. The
+solver returns the final mean action sequence. The controller executes
+its receding-horizon prefix, updates $e$, and repeats the procedure from
+the new observation.
 
-\noindent\fbox{\begin{minipage}{0.96\linewidth}
-\textbf{HAS planning at one replanning step}\\
-\textbf{Input:} current latent $z_e$, goal latent $z_g$, goal offset
-$o$, elapsed steps $e$, horizon $H$, block size $b$.\\
-1. Compute $k\leftarrow\max((o-e-H)/b,0)$.\\
-2. For each CEM iteration, sample candidate action-block sequences.\\
-3. Roll $P$ over each sequence to obtain $\hat z^{(n)}_{e+H}$.\\
-4. Apply $F$ recursively $k$ times and evaluate
-$\|F^k(\hat z^{(n)}_{e+H})-z_g\|_2^2$.\\
-5. Update CEM with the lowest-cost candidates.\\
-6. Execute the selected sequence and replan from the next observation.
-\end{minipage}}
+\begin{algorithm}[t]
+\caption{Horizon-Aligned CEM at elapsed time $e$}
+\label{alg:has-cem}
+\begin{algorithmic}[1]
+\Require current latent $z_e$; goal latent $z_g$; goal offset $o$
+\Require predictor $P$; Forward imaginer $F$; block size $b$; horizon $H=mb$
+\Require candidates $N$; elites $M$; CEM iterations $J$
+\Ensure optimized action-block sequence $A^\star$
+\State $k \gets \max\!\left((o-e-H)/b,\,0\right)$
+\State $(\mu_0,\sigma_0) \gets \Call{InitializeCEM}{m}$
+\For{$j=1,\ldots,J$}
+    \State $A^{(1:N)}
+        \gets \Call{Sample}{\mu_{j-1},\sigma_{j-1},N}$
+    \ForAll{$n\in\{1,\ldots,N\}$}
+        \State $\hat z^{(n)}_{e+H}
+            \gets P^{(m)}(z_e,A^{(n)})$
+        \State $\tilde z^{(n)}_{o}
+            \gets F^{k}(\hat z^{(n)}_{e+H})$
+        \State $c_n \gets \|\tilde z^{(n)}_{o}-z_g\|_2^2$
+    \EndFor
+    \State $\mathcal{I}_j \gets \Call{Elite}{c_{1:N},M}$
+    \State $(\mu_j,\sigma_j)
+        \gets \Call{Moments}{\{A^{(n)}:n\in\mathcal{I}_j\}}$
+\EndFor
+\State \Return $A^\star\gets\mu_J$
+\end{algorithmic}
+\end{algorithm}
+
+The depth is recomputed after every executed plan. For example, an
+offset-$100$ episode uses depths $15$, $10$, $5$, and $0$ at elapsed
+times $0$, $25$, $50$, and $75$.
 
 HAS adds $k$ evaluations of a small residual MLP for every candidate.
 Its additional computational cost grows linearly with both the Forward
@@ -374,45 +397,55 @@ as the goal horizon is approached.
 We evaluate LeWM and HAS on PushT~\citep{florence2022ibc} and
 TwoRoom~\citep{sobal2025rewardfree} using one epoch-$10$ training
 checkpoint per task. Evaluation seeds
-$42$--$51$ each provide $50$ episodes, with paired starts for the two
-methods within each seed. We report the mean and standard deviation of
-the ten per-seed success rates.
+$42$--$51$ each provide $50$ episodes, with paired starts for all
+planner configurations within each seed. We report the mean and
+standard deviation of the ten per-seed success rates.
 
 Goal offsets are $25$, $50$, $75$, and $100$ environment steps. The
-interaction budget is twice the corresponding offset. CEM plans five
-action blocks of five steps at every offset and replans after executing
-the resulting $25$-step action sequence. We use the success criterion
-defined by each environment.
+interaction budget is twice the corresponding offset. LeWM and HAS use
+a CEM horizon of five action blocks and replan after executing the
+resulting $25$-step sequence. We additionally evaluate LeWM with a
+horizon and receding horizon of ten blocks, yielding a $50$-step plan.
+All configurations use five-step action blocks, $300$ candidates, $30$
+elites, and $30$ CEM updates. We use the success criterion defined by
+each environment.
 
 \begin{figure}[htbp]
 \begin{center}
-\includegraphics[width=0.98\linewidth]{figures/fig_iclr_multiseed.png}
+\includegraphics[width=0.98\linewidth]{figures/fig_iclr_multiseed.pdf}
 \end{center}
-\caption{Success rate versus goal offset on PushT and TwoRoom. Points
-are per-seed rates ($n{=}50$); lines show the $10$-seed mean and
-shaded bands the standard deviation. The dashed line marks $k{=}0$.}
+\caption{Success rate versus goal offset on PushT and TwoRoom. CEM
+horizon $h$ is measured in five-step action blocks. Points are
+per-seed rates ($n{=}50$); lines show the $10$-seed mean and shaded
+bands the standard deviation. The vertical dashed line marks the
+$25$-step horizon at which HAS uses $k{=}0$.}
 \label{fig:multiseed}
 \end{figure}
 
 \begin{table}[htbp]
 \caption{Success rate (\%; mean $\pm$ std over $10$ evaluation seeds).
-Bold marks the higher mean at offsets beyond the planning horizon.}
+Bold marks the highest mean for each task and offset.}
 \label{tab:main}
 \begin{center}
+\small
 \begin{tabular}{llcccc}
 \toprule
 Task & Method & $25$ & $50$ & $75$ & $100$ \\
 \midrule
-PushT & LeWM
-  & $87.2{\pm}3.6$ & $42.8{\pm}6.0$ & $21.6{\pm}7.4$ & $13.2{\pm}4.0$ \\
- & HAS
+PushT & LeWM ($h{=}5$)
+  & $\mathbf{87.2{\pm}3.6}$ & $42.8{\pm}6.0$ & $21.6{\pm}7.4$ & $13.2{\pm}4.0$ \\
+ & LeWM ($h{=}10$)
+  & $49.2{\pm}7.3$ & $39.8{\pm}6.8$ & $19.8{\pm}4.3$ & $15.0{\pm}6.4$ \\
+ & HAS ($h{=}5$)
   & $87.0{\pm}3.8$ & $\mathbf{67.8{\pm}5.8}$ & $\mathbf{40.4{\pm}4.2}$
   & $\mathbf{23.4{\pm}6.7}$ \\
 \midrule
-TwoRoom & LeWM
-  & $84.4{\pm}4.8$ & $42.4{\pm}5.5$ & $25.8{\pm}8.3$ & $16.4{\pm}6.0$ \\
- & HAS
-  & $84.4{\pm}4.8$ & $\mathbf{80.4{\pm}5.3}$ & $\mathbf{82.0{\pm}6.1}$
+TwoRoom & LeWM ($h{=}5$)
+  & $\mathbf{84.4{\pm}4.8}$ & $42.4{\pm}5.5$ & $25.8{\pm}8.3$ & $16.4{\pm}6.0$ \\
+ & LeWM ($h{=}10$)
+  & $80.4{\pm}5.7$ & $54.6{\pm}3.4$ & $33.6{\pm}7.2$ & $23.0{\pm}6.4$ \\
+ & HAS ($h{=}5$)
+  & $\mathbf{84.4{\pm}4.8}$ & $\mathbf{80.4{\pm}5.3}$ & $\mathbf{82.0{\pm}6.1}$
   & $\mathbf{70.4{\pm}7.2}$ \\
 \bottomrule
 \end{tabular}
@@ -425,9 +458,11 @@ TwoRoom & LeWM
 On PushT, HAS raises mean success from $42.8\%$ to $67.8\%$ at offset
 $50$ and from $21.6\%$ to $40.4\%$ at offset $75$, gains of $25.0$
 and $18.8$ percentage points. At offset $100$, success increases from
-$13.2\%$ to $23.4\%$. The improvement remains consistent across the
-three long-offset settings, while its magnitude decreases with the
-offset.
+$13.2\%$ to $23.4\%$. Doubling the CEM horizon yields $39.8\%$,
+$19.8\%$, and $15.0\%$ at offsets $50$, $75$, and $100$. HAS exceeds
+this longer-horizon baseline by $28.0$, $20.6$, and $8.4$ percentage
+points, respectively. In this protocol, a longer action-conditioned
+rollout does not reproduce the gain from horizon-aligned scoring.
 
 \subsection{TwoRoom}
 \label{sec:tworoom}
@@ -436,19 +471,21 @@ On TwoRoom, LeWM success falls from $84.4\%$ at offset $25$ to
 $42.4\%$, $25.8\%$, and $16.4\%$ at offsets $50$, $75$, and $100$.
 HAS obtains $80.4\%$, $82.0\%$, and $70.4\%$ at the same offsets,
 corresponding to gains of $38.0$, $56.2$, and $54.0$ percentage
-points. HAS improves over LeWM for every evaluation seed at each
-offset beyond one planning horizon.
+points. The doubled-horizon LeWM baseline improves over the
+$h{=}5$ baseline at these offsets, reaching $54.6\%$, $33.6\%$, and
+$23.0\%$. HAS remains higher by $25.8$, $48.4$, and $47.4$ percentage
+points, respectively.
 
 \subsection{Limitations}
 \label{sec:limits}
 
 The current evaluation covers two simulated tasks and one training
-checkpoint per task. It does not yet establish how HAS compares with
-longer-horizon LeWM planning or recent long-horizon methods, and
-PushT success remains $23.4\%$ at offset $100$. HAS also assumes that
-the temporal goal offset is available when selecting the recursion
-depth. Broader task coverage, training-seed variation, and direct
-long-horizon baselines remain necessary.
+checkpoint per task. The long-CEM control covers one alternative
+horizon and is not a compute-matched comparison; direct comparisons
+with recent long-horizon methods remain necessary. PushT success also
+remains $23.4\%$ at offset $100$. HAS assumes that the temporal goal
+offset is available when selecting the recursion depth. Broader task
+coverage and training-seed variation remain necessary.
 
 \section{Conclusion}
 \label{sec:concl}
@@ -464,11 +501,12 @@ evaluated.
 Across ten paired evaluation seeds, HAS improves success over LeWM at
 every tested offset beyond the $25$-step planning horizon on PushT and
 TwoRoom. The gains are largest at offset $50$ on PushT and offset $75$
-on TwoRoom, while PushT at offset $100$ remains difficult. The evidence
-is therefore specific to the evaluated LeWM checkpoints and tasks. HAS
-also requires the goal offset to determine its recursion depth, and the
-current study does not separate horizon alignment from longer CEM
-rollouts or compare against recent long-horizon planners. Extending the
+on TwoRoom, while PushT at offset $100$ remains difficult. Doubling the
+LeWM CEM horizon does not match HAS: it provides modest gains on
+long-offset TwoRoom but little benefit on PushT. The evidence remains
+specific to the evaluated LeWM checkpoints and tasks. HAS also requires
+the goal offset to determine its recursion depth, and comparisons
+against recent long-horizon planners remain incomplete. Extending the
 evaluation across training seeds, task families, and unknown goal-time
 settings is the next step toward establishing the broader scope of the
 method.
@@ -556,9 +594,14 @@ legacy Forward path only.
 CEM samples $300$ candidate sequences per update, retains the $30$
 lowest-cost candidates, and performs $30$ distribution updates with
 initial variance scale $1.0$. Each candidate contains five action
-blocks, and each block contains five environment actions. The planning
-and receding horizons are both five blocks, so the controller executes
-a $25$-step plan before replanning.
+blocks in the default LeWM and HAS configurations, and each block
+contains five environment actions. Their planning and receding horizons
+are both five blocks, so the controller executes a $25$-step plan before
+replanning. The long-CEM baseline uses ten-block planning and receding
+horizons, producing a $50$-step plan while retaining the same candidate,
+elite, and CEM-update counts. At offset $25$, this plan extends beyond
+the nominal goal offset; the condition is reported for completeness,
+while offsets $50$--$100$ provide the relevant longer-horizon control.
 
 \paragraph{Depth calculation.}
 For goal offset $o$, elapsed environment steps $e$, planning horizon
@@ -575,8 +618,8 @@ terminal cost. For offset $100$, successive replanning steps use
 Goal offsets are $25$, $50$, $75$, and $100$ environment steps, and
 the interaction budget is twice the offset. Each evaluation seed in
 $\{42,\ldots,51\}$ provides $50$ episodes. Within a task and seed,
-LeWM and HAS use the same starts. We first compute one success rate per
-seed and method, then report the mean and standard deviation of these
-ten rates in Table~\ref{tab:main}.
+all three planner configurations use the same starts. We first compute
+one success rate per seed and configuration, then report the mean and
+standard deviation of these ten rates in Table~\ref{tab:main}.
 
 \end{document}
