@@ -48,21 +48,25 @@ Address \\
 \maketitle
 
 \begin{abstract}
-Latent world models can control an agent by predicting the outcomes of
-candidate actions and selecting the rollout whose terminal
-representation is closest to a goal. This criterion is temporally
-misaligned when the model predicts only a short horizon but the goal is
-sampled from a later point in the trajectory: a near-term endpoint is
-compared directly with a distant goal. We introduce Horizon-Aligned
-Scoring (HAS), which evaluates each short rollout at the time represented
-by the goal. HAS trains an action-free Forward imaginer on local latent
-transitions and recursively applies it to the predicted endpoint before
-computing the terminal distance. The recursion depth decreases as
-receding-horizon control approaches the goal time. On PushT and TwoRoom,
-HAS improves success at every evaluated offset beyond the planning
-horizon and outperforms LeWM with a doubled CEM horizon. It raises
-PushT success from $42.8\%$ to $67.8\%$ at offset $50$, and TwoRoom
-success from $16.4\%$ to $70.4\%$ at offset $100$.
+Latent world models plan by ranking action-conditioned rollouts
+according to their terminal distance from an encoded visual goal. When
+the rollout horizon is shorter than the goal offset, this objective
+compares representations associated with different future times,
+creating a temporal mismatch between short-term prediction and
+long-horizon progress. We identify this mismatch as a critical
+bottleneck in terminal latent scoring and introduce Horizon-Aligned
+Scoring (HAS). HAS trains an action-free Forward imaginer on local
+latent transitions, then recursively propagates each short-rollout
+endpoint across the remaining temporal gap before computing its goal
+distance. This extends the scoring horizon without requiring
+action-conditioned prediction over the full goal offset. Across ten
+paired evaluation seeds on PushT and TwoRoom, HAS improves success at
+every evaluated offset beyond the planning horizon. It raises PushT
+success from $42.8\%$ to $67.8\%$ at offset $50$ and TwoRoom success
+from $16.4\%$ to $70.4\%$ at offset $100$. HAS also outperforms LeWM
+with a doubled CEM horizon at all long offsets, showing that aligning
+the scoring horizon can be more effective than simply lengthening the
+action-conditioned rollout.
 \end{abstract}
 
 \section{Introduction}
