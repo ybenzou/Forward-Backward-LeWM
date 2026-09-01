@@ -22,6 +22,11 @@ EXPORTS = {
     HERE / "forward_eval.drawio": HERE / "fig_has_evaluation.svg",
 }
 
+LABEL_REPLACEMENTS = {
+    "Auto-Forward LeWM Training Pipeline": "HAS Training Pipeline",
+    "Auto-Forward LeWM Eval Pipeline": "HAS Evaluation Pipeline",
+}
+
 DATA_URI = re.compile(
     r"data:image/svg\+xml(?:;base64)?,([A-Za-z0-9+/=%]+)",
     flags=re.IGNORECASE,
@@ -61,6 +66,8 @@ def embedded_svgs(drawio_path: Path) -> list[bytes]:
 def sanitize_for_pdf(svg: bytes) -> bytes:
     """Resolve Draw.io adaptive-color CSS unsupported by CairoSVG."""
     text = svg.decode("utf-8")
+    for old_label, new_label in LABEL_REPLACEMENTS.items():
+        text = text.replace(old_label, new_label)
     text = re.sub(
         r"<style[^>]*>@supports \(color: light-dark.*?</style>",
         "",
