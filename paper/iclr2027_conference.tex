@@ -66,10 +66,10 @@ prediction over the full goal offset. Across ten paired evaluation
 groups on PushT, TwoRoom, and Reacher, HAS improves success at every
 tested offset beyond $H$. It raises PushT success from $42.8\%$ to
 $67.8\%$ at goal offset $o{=}50$ and TwoRoom success from $16.4\%$ to
-$70.4\%$ at $o{=}100$. HAS also outperforms Long-CEM, a LeWM planner
-with span $H{=}50$, at all long offsets, showing that aligning the
-scoring horizon can be more effective than lengthening the
-action-conditioned rollout.
+$70.4\%$ at $o{=}100$. The same LeWM planner with span $H{=}50$
+does not match these gains, showing that aligning the scoring time
+can be more effective than lengthening the action-conditioned
+rollout.
 \end{abstract}
 
 \section{Introduction}
@@ -132,16 +132,13 @@ each remaining action block and computes the ordinary goal distance
 from the resulting horizon-aligned endpoint. Replanning reduces the
 number of Forward steps as execution advances.
 
-Our evaluation isolates the effect of this scoring rule across four
-goal offsets on PushT, TwoRoom, and Reacher. When $o{=}H{=}25$, HAS
-uses $k{=}0$ and matches LeWM within evaluation variation. At every
-tested offset beyond $H$, HAS raises mean success. The largest gains
-are $25.0$ points on PushT at $o{=}50$ and $56.2$ points on TwoRoom at
-$o{=}75$. Long-CEM, a LeWM planner with span $H{=}50$, remains below
-HAS at all long offsets on all three tasks. These results support
-horizon alignment as a useful scoring operation in the tested LeWM
-setting. Prediction and representation errors remain separate sources
-of planning error.
+The experiments isolate this scoring change rather than a new metric
+or a longer action-conditioned rollout. When the goal offset equals
+the planning span, HAS applies no Forward steps and matches LeWM.
+When the goal lies farther ahead, the same short-horizon planner
+improves. Lengthening the LeWM plan to $H{=}50$ does not recover
+those gains. Prediction error and poorly structured latent distances
+remain separate sources of planning error.
 
 The paper makes three contributions:
 \begin{enumerate}
@@ -152,8 +149,8 @@ goal.
 Forward imaginer with detached one-step and recursive supervision, then
 uses it to align candidate endpoints with the goal time.
 \item We evaluate HAS over ten paired evaluation groups on three visual
-control tasks, including a Long-CEM control with span $H{=}50$, and
-find consistent gains beyond the default planning span $H{=}25$.
+control tasks. A control that keeps LeWM scoring but doubles the
+planning span to $H{=}50$ does not match HAS beyond the default span.
 \end{enumerate}
 
 \section{Related work}
@@ -211,20 +208,30 @@ endpoint to the goal horizon before applying latent distance.
 \section{Background and problem setup}
 \label{sec:setup}
 
+\paragraph{Time scales.}
+All clocks below are environment steps: one simulator action. Training
+and planning group $b{=}5$ consecutive environment steps into an
+action block; both the action-conditioned predictor $P$ and the
+Forward imaginer $F$ treat one block as a single transition. A CEM
+plan of $h$ blocks therefore covers a planning span $H{=}hb$
+environment steps. The official planner uses $h{=}5$, so $H{=}25$.
+The goal image is taken $o$ environment steps after the initial
+observation; the interaction budget is $2o$ and is independent of
+$H$. After $e$ environment steps have been executed, the remaining
+gap after the current plan is $o-e-H$.
+
 \paragraph{Goal-conditioned latent control.}
 Let $x_t$ denote an image observation and $u_t$ an environment action at
 time $t$. The encoder maps an image to
-$z_t=E(x_t)\in\mathbb{R}^{d}$. Training and planning group
-$b=5$ consecutive environment actions into an action block
-$a_j=(u_{bj},\ldots,u_{bj+b-1})$. A transition in latent time therefore
-represents $b$ environment steps. Given recent latents and action
-blocks, the action-conditioned predictor $P$ estimates the next latent.
+$z_t=E(x_t)\in\mathbb{R}^{d}$. An action block is
+$a_j=(u_{bj},\ldots,u_{bj+b-1})$. Given recent latents and action
+blocks, $P$ estimates the next latent.
 
 At evaluation, a goal image $x_g=x_{\tau+o}$ is sampled at goal offset
 $o$ from the initial observation $x_\tau$, and
 $z_g=E(x_g)$. At a replanning step, $e$ environment steps have elapsed
 since $x_\tau$. CEM considers candidate sequences of $h{=}5$ action
-blocks, giving planning span $H{=}hb{=}25$ environment steps. For
+blocks, so $H{=}25$. For
 candidate $a^{(n)}_{0:h-1}$, autoregressive prediction yields endpoint
 \begin{equation}
 \hat z^{(n)}_{e+H}
@@ -280,7 +287,9 @@ using LayerNorm, a $192\!\rightarrow\!768\!\rightarrow\!192$ projection,
 and GELU activation, followed by output normalization and a linear
 projection. Its action-free input makes $F$ a marginal predictor of
 local latent evolution in the offline trajectories, rather than a model
-of candidate-specific dynamics.
+of candidate-specific dynamics. $F$ does not invent later controls; it
+only moves the time at which an already proposed action sequence is
+scored.
 
 Training uses the alignment $p_i\approx z_{i+1}$ supplied by LeWM.
 Inputs and targets for $F$ are detached from both $P$ and $E$; bars
@@ -388,10 +397,11 @@ the new observation.
 \end{algorithmic}
 \end{algorithm}
 
-The depth is recomputed after every executed plan. When $o{=}H$,
-$k{=}0$ and HAS reduces to the LeWM cost. For a goal offset $o{=}100$
-and default span $H{=}25$, successive replans use depths $15$, $10$,
-$5$, and $0$ at elapsed times $0$, $25$, $50$, and $75$.
+The depth is recomputed after every executed plan because the remaining
+gap shrinks as $e$ increases. When $o{=}H$, $k{=}0$ and HAS reduces
+to the LeWM cost. For a goal offset $o{=}100$ and default span
+$H{=}25$, successive replans use depths $15$, $10$, $5$, and $0$ at
+elapsed times $0$, $25$, $50$, and $75$.
 
 HAS adds $k$ evaluations of a small residual MLP for every candidate.
 Its additional computational cost grows linearly with both the Forward
@@ -403,9 +413,10 @@ as the goal horizon is approached.
 
 \subsection{Evaluation protocol}
 
-We evaluate LeWM, HAS, and Long-CEM on
+We evaluate official LeWM ($H{=}25$), HAS ($H{=}25$), and the same
+LeWM planner with span $H{=}50$ on
 PushT~\citep{florence2022ibc}, TwoRoom~\citep{sobal2025rewardfree}, and
-Reacher~\citep{lewm2026} using one epoch-$10$ training checkpoint per
+Reacher~\citep{lewm2026}, using one epoch-$10$ training checkpoint per
 task. Ten
 evaluation groups, seeds $42$--$51$, each provide $50$ episodes. Within
 a task and group, all planner configurations share the same starts.
@@ -414,14 +425,14 @@ independent training seeds. We report the mean and standard deviation
 of the ten group-level success rates, together with paired
 group-bootstrap $95\%$ intervals on HAS$-$baseline gaps.
 
-Goal offsets are $o\in\{25,50,75,100\}$ environment steps, following
+Goal offsets are $o\in\{25,50,75,100\}$, following
 the official LeWM multi-offset sweep. The interaction budget is
-$2o$. LeWM and HAS use $h{=}5$ action blocks, so $H{=}25$ and HAS
-uses $k{=}0$ exactly when $o{=}H$. Long-CEM is a LeWM planner with
-$h{=}10$ blocks and receding horizon $10$, giving span $H{=}50$. At
-$o{=}25$, this plan extends beyond the goal time; we report the
-condition for completeness and treat $o\ge 50$ as the relevant
-longer-horizon control. All configurations use $b{=}5$, $300$
+$2o$. HAS uses $k{=}0$ exactly when $o{=}H{=}25$. The $H{=}50$
+control keeps LeWM terminal scoring and doubles the number of
+action blocks to $h{=}10$ (receding horizon $10$). At
+$o{=}25$, that plan extends beyond the goal time; we report the
+column for completeness and treat $o\ge 50$ as the relevant
+longer-horizon comparison. All configurations use $b{=}5$, $300$
 candidates, $30$ elites, and $30$ CEM updates. We use the success
 criterion defined by each environment.
 
@@ -440,7 +451,7 @@ $o{=}H{=}25$, where HAS uses $k{=}0$.}
 \begin{table}[t]
 \caption{Success rate (\%; mean $\pm$ std over $10$ evaluation
 groups). Bold marks the highest mean for each task and offset.
-$^\dagger$Long-CEM uses $H{=}50$, so the $o{=}25$ column is a
+$^\dagger$LeWM with $H{=}50$, so the $o{=}25$ column is a
 non-primary overshoot condition.}
 \label{tab:main}
 \begin{center}
@@ -451,7 +462,7 @@ Task & Method & $o{=}25$ & $o{=}50$ & $o{=}75$ & $o{=}100$ \\
 \midrule
 PushT & LeWM ($H{=}25$)
   & $\mathbf{87.2{\pm}3.6}$ & $42.8{\pm}6.0$ & $21.6{\pm}7.4$ & $13.2{\pm}4.0$ \\
- & Long-CEM ($H{=}50$)
+ & LeWM ($H{=}50$)
   & $49.2{\pm}7.3^\dagger$ & $39.8{\pm}6.8$ & $19.8{\pm}4.3$ & $15.0{\pm}6.4$ \\
  & HAS ($H{=}25$)
   & $87.0{\pm}3.8$ & $\mathbf{67.8{\pm}5.8}$ & $\mathbf{40.4{\pm}4.2}$
@@ -459,7 +470,7 @@ PushT & LeWM ($H{=}25$)
 \midrule
 TwoRoom & LeWM ($H{=}25$)
   & $\mathbf{84.4{\pm}4.8}$ & $42.4{\pm}5.5$ & $25.8{\pm}8.3$ & $16.4{\pm}6.0$ \\
- & Long-CEM ($H{=}50$)
+ & LeWM ($H{=}50$)
   & $80.4{\pm}5.7^\dagger$ & $54.6{\pm}3.4$ & $33.6{\pm}7.2$ & $23.0{\pm}6.4$ \\
  & HAS ($H{=}25$)
   & $\mathbf{84.4{\pm}4.8}$ & $\mathbf{80.4{\pm}5.3}$ & $\mathbf{82.0{\pm}6.1}$
@@ -467,7 +478,7 @@ TwoRoom & LeWM ($H{=}25$)
 \midrule
 Reacher & LeWM ($H{=}25$)
   & $\mathbf{83.4{\pm}6.1}$ & $92.6{\pm}2.3$ & $85.8{\pm}4.8$ & $81.0{\pm}4.9$ \\
- & Long-CEM ($H{=}50$)
+ & LeWM ($H{=}50$)
   & $42.8{\pm}9.1^\dagger$ & $78.0{\pm}8.3$ & $86.6{\pm}4.1$ & $83.4{\pm}3.7$ \\
  & HAS ($H{=}25$)
   & $\mathbf{83.4{\pm}6.1}$ & $\mathbf{96.0{\pm}1.3}$ & $\mathbf{95.0{\pm}2.2}$
@@ -480,175 +491,84 @@ Reacher & LeWM ($H{=}25$)
 \subsection{Main results}
 \label{sec:main}
 
-HAS matches LeWM at $o{=}H{=}25$ and improves mean success at every
-larger offset (Figure~\ref{fig:multiseed}, Table~\ref{tab:main}). On
-PushT the paired gaps are $+25.0$ points at $o{=}50$
-($95\%$ CI $[20.6,28.8]$), $+18.8$ at $o{=}75$, and $+10.2$ at
-$o{=}100$, each with HAS ahead on all ten groups. On TwoRoom the
-corresponding gaps are $+38.0$, $+56.2$, and $+54.0$ points, again
-with ten-for-ten group wins. Reacher is already a high-success LeWM
-setting; HAS still adds $+3.4$, $+9.2$, and $+9.8$ points at
-$o\in\{50,75,100\}$, with no group loss.
+When the goal offset equals the planning span, HAS and LeWM coincide.
+TwoRoom and Reacher match exactly at $o{=}25$, and PushT differs by
+$-0.2$ points ($95\%$ CI $[-0.8,0.4]$). That identity is required: no
+Forward steps are applied, so the two methods rank the same candidates
+with the same Euclidean cost.
 
-Long-CEM does not reproduce these gains. At $o\ge 50$, HAS exceeds
-Long-CEM by $28.0$, $20.6$, and $8.4$ points on PushT, by $25.8$,
-$48.4$, and $47.4$ points on TwoRoom, and by $18.0$, $8.4$, and
-$7.4$ points on Reacher. The $o{=}25$ Long-CEM column is weaker still
-on PushT and Reacher, consistent with executing a $50$-step plan
-toward a $25$-step goal. Lengthening the action-conditioned rollout
-is therefore not a substitute for aligning the scoring time.
+Once $o>H$, HAS raises mean success on every task
+(Figure~\ref{fig:multiseed}, Table~\ref{tab:main}). The change is
+largest where a short endpoint is a poor proxy for later progress.
+TwoRoom at $o{=}75$ rises from $25.8\%$ to $82.0\%$, and PushT at
+$o{=}50$ rises from $42.8\%$ to $67.8\%$. Reacher is already a
+high-success LeWM setting; HAS still improves it, but the absolute
+margin is smaller. PushT at $o{=}100$ remains $23.4\%$, so alignment
+does not make an arbitrarily distant goal easy.
 
-\subsection{Analysis and mechanism}
+Lengthening the action-conditioned plan is a different intervention.
+LeWM with $H{=}50$ uses the same predictor and the same CEM budget,
+but compares a $50$-step endpoint with the goal. It does not match HAS
+at $o\ge 50$ on any task. At $o{=}25$ it is weaker on PushT and
+Reacher, consistent with executing a $50$-step plan toward a
+$25$-step goal. A longer $P$ rollout therefore does not substitute
+for aligning the scoring time.
+
+\subsection{Analysis}
 \label{sec:analysis}
 
 \begin{figure*}[t]
 \centering
 \includegraphics[width=\textwidth]{figures/fig_has_process.pdf}
-\caption{Executed frames on one shared start per task. Columns are
-environment steps in increments of the action block $b{=}5$, plus the
-visual goal. All three tasks use $o{=}75$. LeWM ($H{=}25$) fails on
-these starts; HAS reaches the goal. The strips are qualitative
-examples, not additional quantitative results.}
+\caption{One shared start per task at goal offset $o{=}75$. Columns
+are environment steps spaced by one action block ($b{=}5$), plus the
+visual goal. LeWM ($H{=}25$) fails on these starts; HAS reaches the
+goal. The strips are qualitative examples, not additional rates.}
 \label{fig:process}
 \end{figure*}
 
-The long-offset gap is visible in execution, not only in aggregate
-rates. Figure~\ref{fig:process} shows one shared start on PushT,
-TwoRoom, and Reacher. LeWM does not reach the goal. HAS does. The
-examples illustrate the paired contrast below; they are not additional
-quantitative results.
+The aggregate gap is visible in execution.
+Figure~\ref{fig:process} shows one shared start on PushT, TwoRoom, and
+Reacher at $o{=}75$. LeWM with $H{=}25$ does not reach the goal on
+these starts; HAS does. TwoRoom makes the comparison-time story
+concrete: the short-horizon plan is still on the near side of the
+doorway when the goal already lies in the far room. PushT is
+contact-rich, so the same scoring change can first reposition the
+pusher before the T moves. Reacher is already geometrically easier;
+the HAS strip still finishes closer to the goal pose. These frames
+are examples, not additional quantitative results.
 
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figures/fig_has_paired_delta.pdf}
-\caption{Paired success gaps (percentage points) with
-group-bootstrap $95\%$ intervals. Blue compares HAS with LeWM at
-$H{=}25$; teal compares HAS with Long-CEM at $H{=}50$. The
-$o{=}25$ teal bars are the Long-CEM overshoot condition.}
-\label{fig:paired}
-\end{figure}
-
-If temporal mismatch is the operative error, two consequences should
-hold. First, HAS and LeWM should coincide whenever $k{=}0$. They do:
-TwoRoom and Reacher match exactly at $o{=}25$, and PushT differs by
-$-0.2$ points (CI $[-0.8,0.4]$). Second, the gain should appear only
-after $o>H$ and should survive a longer action-conditioned baseline.
-Figure~\ref{fig:paired} shows both patterns. The $k{=}0$ column is an
-internal ranking control: the same CEM candidates and the same
-terminal metric produce the same decisions when no Forward steps are
-applied.
-
-The Forward map itself moves latents as depth increases. Across the
-ten groups, $\|F^{k}(z)-z\|_2$ rises from $1.06$ to $1.26$ on PushT,
-from $0.90$ to $1.08$ on Reacher, and remains near $1.00$ on TwoRoom
-for $k\in\{1,5,10,15\}$ (Appendix~\ref{app:analysis}). TwoRoom
-therefore does not need large Euclidean travel to change candidate
-order; the same recursion that barely displaces the seed latent still
-restores long-offset success. This is consistent with HAS as a
-time-alignment operator rather than a reconstruction of the full
-future observation.
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figures/fig_has_latents.pdf}
-\caption{Held-out latent geometry, excluding evaluation-manifest
-episodes. Top: PCA of the action-conditioned time $z_{t+25}$, the
-HAS-aligned point $F^{10}(z_{t+25})$, and the encoded goal
-$z_{t+75}$. Bottom: temporal retrieval accuracy of $F^{k}(z_t)$
-against encoder latents at $t{+}5j$. The scatter is a visualization;
-the retrieval curve is the quantitative check. These panels do not
-claim $F^{k}(z)=z_{t+kb}$.}
-\label{fig:latents}
-\end{figure}
-
-Figure~\ref{fig:latents} examines the same map on held-out dataset
-windows rather than CEM candidates. PCA places $F^{10}(z_{t+25})$
-relative to $z_{t+25}$ and $z_{t+75}$; t-SNE and goal-distance
-histograms are in Appendix~\ref{app:analysis}. Retrieval accuracy
-asks whether $F^{k}(z_t)$ is nearest the encoder latent at
-$t{+}5k$. A TwoRoom cloud that remains compact is compatible with
-the near-unit displacement already reported: a small Euclidean move
-can still change the nearest future time.
-
-HAS also does not buy its gains with a longer predictor rollout.
-Table~\ref{tab:cost} reports wall-clock seconds per $50$-episode
-group. At $o{=}25$, HAS and LeWM take essentially the same time, while
-Long-CEM is $1.3$--$1.6\times$ slower. At $o{=}100$, HAS remains
-comparable to LeWM on PushT and Reacher and is faster on TwoRoom,
-where earlier successes shorten executed episodes. The additional
-cost of $F$ is therefore small relative to doubling the
-action-conditioned span.
-
-\begin{table}[t]
-\caption{Wall-clock seconds per $50$-episode group
-(mean $\pm$ std over $10$ groups).}
-\label{tab:cost}
-\begin{center}
-\small
-\begin{tabular}{llcc}
-\toprule
-Task & Method & $o{=}25$ & $o{=}100$ \\
-\midrule
-PushT & LeWM ($H{=}25$) & $61.7{\pm}4.9$ & $322.9{\pm}14.3$ \\
- & HAS ($H{=}25$) & $59.7{\pm}2.5$ & $328.6{\pm}9.0$ \\
- & Long-CEM ($H{=}50$) & $96.0{\pm}2.0$ & $338.2{\pm}16.6$ \\
-\midrule
-TwoRoom & LeWM ($H{=}25$) & $64.8{\pm}9.3$ & $323.4{\pm}18.2$ \\
- & HAS ($H{=}25$) & $60.5{\pm}6.9$ & $234.5{\pm}17.4$ \\
- & Long-CEM ($H{=}50$) & $99.4{\pm}9.6$ & $329.3{\pm}22.9$ \\
-\midrule
-Reacher & LeWM ($H{=}25$) & $83.6{\pm}4.1$ & $172.3{\pm}15.6$ \\
- & HAS ($H{=}25$) & $87.1{\pm}4.1$ & $191.1{\pm}13.2$ \\
- & Long-CEM ($H{=}50$) & $105.8{\pm}3.7$ & $229.3{\pm}15.2$ \\
-\bottomrule
-\end{tabular}
-\end{center}
-\end{table}
+Two consequences follow if the operative change is the comparison
+time. First, HAS must collapse to LeWM whenever $k{=}0$; the $o{=}H$
+column already shows that. Second, increasing $H$ while keeping LeWM
+scoring must not reproduce HAS. The $H{=}50$ rows in
+Table~\ref{tab:main} are that control. Together they locate the gain
+in when the Euclidean score is evaluated, not in a longer
+action-conditioned forecast.
 
 \subsection{Ablations}
 \label{sec:ablation}
 
-The protocol already isolates the two design questions that matter
-most. Alignment depth is tested by $o{=}25$, where $k{=}0$ disables
-$F$ and HAS reduces to LeWM. The same scoring rule, with $k>0$, is
-what produces the $o>H$ gains. Extra action-conditioned compute is
-tested by Long-CEM: increasing $H$ from $25$ to $50$ does not match
-HAS at $o\ge 50$ and is strictly worse at the $o{=}25$ overshoot.
+The protocol already isolates those two design questions.
+Setting $o{=}H$ disables $F$ and recovers LeWM. Replacing HAS scoring
+with LeWM scoring at $H{=}50$ tests extra action-conditioned compute
+and does not match HAS at $o\ge 50$.
 
-Table~\ref{tab:kdepth} holds the Forward checkpoint fixed and replaces
-the dynamic schedule with a constant depth on the seed-$42$ starts.
-$k{=}0$ should recover LeWM. $k{=}5$ under-aligns a $75$- or
-$100$-step goal; $k{=}15$ overshoots the $o{=}75$ schedule
-($k{=}10$ at the first replan).
-
-\begin{table}[t]
-\caption{Seed-$42$ HAS success (\%) with a frozen checkpoint and a
-fixed Forward depth. Dynamic $k$ is the reported schedule. Dashes
-mark unfinished evals.}
-\label{tab:kdepth}
-\begin{center}
-\small
-\input{tables/tab_k_depth}
-\end{center}
-\end{table}
-
-A single-group PushT check further supports the action-free
-assumption. An action-aligned Forward and a sequential
-action-conditioned Forward, trained and evaluated on the same seed-$42$
-starts, reach $58\%$ and $68\%$ at $o{=}50$ versus $62\%$ for the
-reported action-free HAS run, and both fall behind at $o{=}75$ and
-$o{=}100$ (Appendix~\ref{app:ablation}). Conditioning $F$ on predicted
-actions is therefore not required for the mid-range gain, and it does
-not improve the long-offset setting in this protocol. The reported
-models use the joint $\mathcal{L}_{\mathrm{step}}+\mathcal{L}_{\mathrm{roll}}$
-objective; we do not claim a full step-versus-roll training sweep.
+A single-group PushT check asks whether $F$ needs actions.
+Action-aligned and sequential action-conditioned variants do not
+improve the long-offset pattern
+(Appendix~\ref{app:ablation}), so the reported models keep $F$
+action-free. The reported models use the joint
+$\mathcal{L}_{\mathrm{step}}+\mathcal{L}_{\mathrm{roll}}$ objective;
+we do not claim a full step-versus-roll training sweep.
 
 \subsection{Limitations}
 \label{sec:limits}
 
 Each task uses one training checkpoint. The ten evaluation groups
 quantify start and planner variability, not training-seed variability.
-Long-CEM is one alternative span and is not compute-matched to HAS.
+The $H{=}50$ control is one alternative span and is not
+compute-matched to HAS.
 PushT success is still $23.4\%$ at $o{=}100$. HAS assumes that the
 temporal goal offset is available when selecting $k$.
 
@@ -663,16 +583,13 @@ an action-free Forward imaginer advances each action-conditioned
 endpoint by the remaining number of action blocks before the goal
 distance is evaluated.
 
-Across ten paired evaluation groups, HAS improves success over LeWM at
-every tested offset beyond the default span $H{=}25$ on PushT,
-TwoRoom, and Reacher. The gains are largest at $o{=}50$ on PushT and
-$o{=}75$ on TwoRoom, while PushT at $o{=}100$ remains difficult.
-Long-CEM, with span $H{=}50$, does not match HAS. The $k{=}0$
-identity at $o{=}H$ and the failure of a longer action-conditioned
-rollout support horizon alignment as the operative change. The
-evidence remains specific to one checkpoint per task. HAS also requires
-the goal offset to set its recursion depth, and comparisons against
-learned terminal metrics remain incomplete.
+On PushT, TwoRoom, and Reacher, that change in comparison time raises
+success whenever the goal lies beyond the default span $H{=}25$. The
+same LeWM planner with $H{=}50$ does not recover the gain, and HAS
+collapses to LeWM when no alignment is applied. The evidence remains
+specific to one checkpoint per task. HAS also requires the goal offset
+to set its recursion depth, and comparisons against learned terminal
+metrics remain incomplete.
 
 \subsection*{AI use statement}
 
@@ -701,8 +618,8 @@ number of episodes, paired evaluation groups, goal offsets, interaction
 budgets, checkpoints, and aggregation procedure.
 Appendix~\ref{app:implementation} records optimization and architectural
 details, Appendix~\ref{app:protocol} specifies CEM and the
-replanning schedule, and Appendices~\ref{app:analysis}--\ref{app:ablation}
-record depth diagnostics and the action-conditioned Forward check.
+replanning schedule, and Appendix~\ref{app:ablation}
+records the action-conditioned Forward check.
 Configurations, checkpoints, start manifests, and
 the scripts used to aggregate Table~\ref{tab:main} will be included
 with the code release.
@@ -762,7 +679,7 @@ CEM samples $300$ candidate sequences per update, retains the $30$
 lowest-cost candidates, and performs $30$ distribution updates with
 initial variance scale $1.0$. Default LeWM and HAS use $h{=}5$ action
 blocks and receding horizon $5$, so $H{=}25$ and the controller
-executes a plan of span $H$ before replanning. Long-CEM uses $h{=}10$
+executes a plan of span $H$ before replanning. The $H{=}50$ control uses $h{=}10$
 and receding horizon $10$, producing span $H{=}50$, while retaining
 the same candidate, elite, and CEM-update counts. At $o{=}25$, this
 plan extends beyond the goal time; the condition is reported for
@@ -788,40 +705,6 @@ all three planner configurations use the same starts. We first compute
 one success rate per group and configuration, then report the mean and
 standard deviation of these ten rates in Table~\ref{tab:main}. Paired
 gaps use a group-level bootstrap with $10{,}000$ resamples.
-
-\section{Forward depth diagnostics}
-\label{app:analysis}
-
-Figure~\ref{fig:depth} reports the mean Forward displacement and latent
-norm over the ten evaluation groups. PushT displacement grows with $k$,
-Reacher grows more slowly, and TwoRoom remains near $1.0$. TwoRoom
-norms drop after $k{=}1$ and then stabilize; PushT and Reacher remain
-in a higher-norm band. These curves are not a claim that
-$F^{k}(z)\approx z_{t+kb}$. They show that the recursion used at
-planning time is temporally progressive and task-dependent.
-Figure~\ref{fig:latents-app} reports t-SNE of the same held-out
-windows as Figure~\ref{fig:latents} and the Euclidean distances
-$\|z_{t+25}-z_{t+75}\|$ versus $\|F^{10}(z_{t+25})-z_{t+75}\|$.
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figures/fig_has_latents_tsne.pdf}\\[0.4em]
-\includegraphics[width=\linewidth]{figures/fig_has_latents_distance.pdf}
-\caption{Appendix views of the held-out latent analysis.
-Top: t-SNE of $z_{t+25}$, $F^{10}(z_{t+25})$, and $z_{t+75}$.
-Bottom: distance-to-goal histograms. Neither plot is a claim that
-$F^{k}(z)=z_{t+kb}$.}
-\label{fig:latents-app}
-\end{figure}
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=0.98\linewidth]{figures/fig_has_forward_depth.pdf}
-\caption{Forward recursion diagnostics over ten evaluation groups.
-Left: displacement from the seed latent. Right: imagined latent
-norm. Shaded bands are one standard deviation.}
-\label{fig:depth}
-\end{figure}
 
 \section{Action-conditioned Forward check}
 \label{app:ablation}

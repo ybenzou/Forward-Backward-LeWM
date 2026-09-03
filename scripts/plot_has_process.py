@@ -271,18 +271,21 @@ def run_subset(task: str, spec: dict, out_root: Path, cache_dir: Path, all_start
     }
 
 
+FONT_STACK = ("Liberation Sans", "Nimbus Sans", "DejaVu Sans", "sans-serif")
+
+
 def _time_label(t: int, major_only: bool = True) -> str:
     if major_only and int(t) not in MAJOR_TIMES:
         return ""
-    return f"$t{int(t)}$"
+    return f"t = {int(t)}"
 
 
 def plot_process(panels: list[dict], dest: Path, *, wrap: bool = False) -> None:
     apply_publication_style(
         FigureStyle(
-            font_size=11,
-            axes_linewidth=1.0,
-            font_family=("DejaVu Sans", "sans-serif"),
+            font_size=9,
+            axes_linewidth=0.8,
+            font_family=FONT_STACK,
         )
     )
     n_tasks = len(panels)
@@ -293,87 +296,89 @@ def plot_process(panels: list[dict], dest: Path, *, wrap: bool = False) -> None:
     if wrap:
         mid = (len(times) + 1) // 2
         strips = [times[:mid], times[mid:]]
-        n_cols = max(len(s) for s in strips) + 1
-        rows_per_task = 1 + 4
-        fig_h = 3.15 * n_tasks
+        n_frame_cols = max(len(s) for s in strips) + 1
+        fig_h = 2.05 * n_tasks
     else:
         strips = [times]
-        n_cols = len(times) + 1
-        rows_per_task = 3
-        fig_h = 2.35 * n_tasks
+        n_frame_cols = len(times) + 1
+        fig_h = 1.58 * n_tasks
 
-    fig_w = min(18.0, 0.78 * n_cols + 1.7)
+    fig_w = 1.45 + 0.62 * n_frame_cols
     fig = plt.figure(figsize=(fig_w, fig_h))
-    outer = fig.add_gridspec(n_tasks, 1, hspace=0.38)
+    outer = fig.add_gridspec(n_tasks, 1, hspace=0.32, left=0.02, right=0.995, top=0.97, bottom=0.02)
 
     for p_i, panel in enumerate(panels):
         n_method_rows = 2 * len(strips)
-        height_ratios = [0.32] + [1.0] * n_method_rows
         inner = outer[p_i].subgridspec(
             1 + n_method_rows,
-            n_cols + 1,
-            height_ratios=height_ratios,
-            width_ratios=[0.72] + [1.0] * n_cols,
-            hspace=0.04,
-            wspace=0.04,
+            2 + n_frame_cols,
+            height_ratios=[0.34] + [1.0] * n_method_rows,
+            width_ratios=[0.42, 0.78] + [1.0] * n_frame_cols,
+            hspace=0.07,
+            wspace=0.05,
         )
+
         header_times = strips[0]
         for c, t in enumerate(header_times):
-            ax = fig.add_subplot(inner[0, c + 1])
+            ax = fig.add_subplot(inner[0, c + 2])
             ax.axis("off")
             label = _time_label(t, major_only=not wrap)
             if label:
-                ax.text(0.5, 0.1, label, ha="center", va="bottom", fontsize=9, color="#4D4D4D")
-            elif int(t) % 25 != 0:
-                ax.plot([0.5], [0.08], marker="|", color="#9A9A9A", markersize=4, transform=ax.transAxes)
-        ax = fig.add_subplot(inner[0, n_cols])
+                ax.text(0.5, 0.18, label, ha="center", va="bottom", fontsize=8, color="#4D4D4D")
+            else:
+                ax.plot([0.5], [0.18], marker="|", color="#C4C4C4", markersize=4, transform=ax.transAxes)
+        ax = fig.add_subplot(inner[0, n_frame_cols + 1])
         ax.axis("off")
-        ax.text(0.5, 0.1, "goal", ha="center", va="bottom", fontsize=9, color="#4D4D4D")
+        ax.text(0.5, 0.18, "goal", ha="center", va="bottom", fontsize=8, color="#4D4D4D")
 
-        name_ax = fig.add_subplot(inner[1:, 0])
-        name_ax.axis("off")
-        name_ax.text(
-            0.0,
-            0.5,
+        title_ax = fig.add_subplot(inner[1:, 0])
+        title_ax.axis("off")
+        title_ax.text(
+            0.55,
+            0.50,
             panel["spec"]["title"],
-            ha="left",
+            ha="center",
             va="center",
-            fontsize=13,
-            color="#272727",
-            transform=name_ax.transAxes,
+            rotation=90,
+            fontsize=11,
+            color="#2B2B2B",
+            transform=title_ax.transAxes,
+            clip_on=False,
         )
-        name_ax.text(1.0, 0.76, "LeWM", ha="right", va="center", fontsize=10, color=method_colors[0])
-        name_ax.text(1.0, 0.24, "HAS", ha="right", va="center", fontsize=10, color=method_colors[1])
 
         seqs = (panel["official_frames"], panel["has_frames"])
         for strip_i, strip in enumerate(strips):
-            for r, (frames, color) in enumerate(zip(seqs, method_colors)):
+            for r, (frames, color, method) in enumerate(zip(seqs, method_colors, method_names)):
                 row = 1 + strip_i * 2 + r
+                lab = fig.add_subplot(inner[row, 1])
+                lab.axis("off")
+                lab.text(
+                    0.96,
+                    0.50,
+                    method,
+                    ha="right",
+                    va="center",
+                    fontsize=9,
+                    color=color,
+                    transform=lab.transAxes,
+                    clip_on=False,
+                )
                 for c, t in enumerate(strip):
-                    ax = fig.add_subplot(inner[row, c + 1])
+                    ax = fig.add_subplot(inner[row, c + 2])
                     ax.imshow(frames[int(t)])
                     ax.set_xticks([])
                     ax.set_yticks([])
                     for spine in ax.spines.values():
                         spine.set_visible(True)
-                        spine.set_linewidth(0.5)
+                        spine.set_linewidth(0.45)
                         spine.set_color("#CFCECE")
-                    if c == 0:
-                        ax.annotate(
-                            "",
-                            xy=(-0.05, 0.0),
-                            xytext=(-0.05, 1.0),
-                            xycoords="axes fraction",
-                            textcoords="axes fraction",
-                            arrowprops={"arrowstyle": "-", "color": color, "lw": 2.0},
-                        )
-                ax = fig.add_subplot(inner[row, n_cols])
+                ax = fig.add_subplot(inner[row, n_frame_cols + 1])
                 ax.imshow(panel["goal"])
                 ax.set_xticks([])
                 ax.set_yticks([])
                 for spine in ax.spines.values():
                     spine.set_visible(True)
-                    spine.set_linewidth(0.5)
+                    spine.set_linewidth(0.45)
                     spine.set_color("#767676")
 
     dest = Path(dest)
