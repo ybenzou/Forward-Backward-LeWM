@@ -5,7 +5,12 @@ from torch import nn
 
 from fblewm import FBLeWM
 from module import CausalLatentImaginer
-from tests.test_model_contracts import _tiny_model
+from tests.test_model_contracts import (
+    _tiny_action_aligned_model,
+    _tiny_branch_model,
+    _tiny_model,
+    _tiny_sequential_model,
+)
 
 
 def _nonzero_grads(module: nn.Module) -> bool:
@@ -85,3 +90,61 @@ def test_detached_imaginer_inputs_block_official_grads():
     assert _nonzero_grads(m.forward_imaginer)
     assert not _has_any_grad(m.encoder)
     assert not _has_any_grad(m.predictor)
+    assert not _has_any_grad(m.action_encoder)
+    assert not _has_any_grad(m.backward_imaginer)
+
+
+def test_action_aligned_loss_updates_only_forward():
+    """Action+latent Forward loss must stay isolated from official modules."""
+    m = _tiny_action_aligned_model()
+    m.zero_grad(set_to_none=True)
+    p = torch.randn(4, 192)
+    z = torch.randn(4, 192)
+    a_tgt = torch.randn(4, 10)
+    a_hat, z_hat = m.forward_imaginer.forward_with_action(p)
+    loss = (z_hat - z).pow(2).mean() + (a_hat - a_tgt).pow(2).mean()
+    loss.backward()
+    assert _nonzero_grads(m.forward_imaginer)
+    assert not _has_any_grad(m.encoder)
+    assert not _has_any_grad(m.predictor)
+    assert not _has_any_grad(m.action_encoder)
+    assert not _has_any_grad(m.backward_imaginer)
+
+
+def test_sequential_action_autonomous_loss_updates_proposer():
+    """H(p, G(p)) must send grad to G even without an action MSE term."""
+    m = _tiny_sequential_model()
+    m.zero_grad(set_to_none=True)
+    p = torch.randn(4, 192)
+    z = torch.randn(4, 192)
+    a_hat, z_hat = m.forward_imaginer.forward_with_action(p)
+    loss = (z_hat - z).pow(2).mean()
+    loss.backward()
+    assert _nonzero_grads(m.forward_imaginer)
+    assert _nonzero_grads(m.forward_imaginer.action_head)
+    assert _nonzero_grads(m.forward_imaginer.action_embed)
+    assert not _has_any_grad(m.encoder)
+    assert not _has_any_grad(m.predictor)
+    assert not _has_any_grad(m.action_encoder)
+    assert not _has_any_grad(m.backward_imaginer)
+
+
+def test_branch_preserving_loss_updates_only_forward():
+    from omegaconf import OmegaConf
+
+    from train import _fill_branch_preserving_forward_losses
+
+    m = _tiny_branch_model(dim=16, num_branches=3)
+    m.zero_grad(set_to_none=True)
+    z = torch.randn(4, 4, 16)
+    p = torch.randn(4, 3, 16)
+    cfg = OmegaConf.create({"loss": {"forward": {"roll_weight": 1.0}}})
+    output = {}
+    holder = type("H", (), {"model": m})()
+    _fill_branch_preserving_forward_losses(holder, output, z, p, cfg)
+    output["forward_loss"].backward()
+    assert _nonzero_grads(m.forward_imaginer)
+    assert not _has_any_grad(m.encoder)
+    assert not _has_any_grad(m.predictor)
+    assert not _has_any_grad(m.action_encoder)
+    assert not _has_any_grad(m.backward_imaginer)

@@ -314,6 +314,8 @@ class CausalLatentImaginer(nn.Module):
     """
 
     is_conditional = False
+    is_action_aligned = False
+    is_sequential_action = False
 
     def __init__(
         self,
@@ -329,24 +331,246 @@ class CausalLatentImaginer(nn.Module):
         self.out_norm = nn.LayerNorm(dim)
         self.out_proj = nn.Linear(dim, dim)
 
-    def forward(self, z: torch.Tensor) -> torch.Tensor:
+    def _forward_features(self, z: torch.Tensor) -> tuple[tuple[int, ...], torch.Tensor]:
+        """Shared trunk. Returns (leading_shape, features) with features (N, dim)."""
         if z.size(-1) != self.dim:
             raise ValueError(
-                f"CausalLatentImaginer expects last dim={self.dim}, got {tuple(z.shape)}"
+                f"{type(self).__name__} expects last dim={self.dim}, got {tuple(z.shape)}"
             )
         leading = z.shape[:-1]
         x = z.reshape(-1, self.dim)
         for block in self.blocks:
             x = block(x)
+        return leading, x
+
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
+        leading, x = self._forward_features(z)
         x = self.out_proj(self.out_norm(x))
         return x.reshape(*leading, self.dim)
 
 
-class ConditionalLatentImaginer(nn.Module):
-    """Backward imaginer: g <- B(z_now, g). z_now is frozen; g is pulled nearer.
+class ActionAlignedCausalLatentImaginer(CausalLatentImaginer):
+    """Unary Forward that jointly predicts next action block and next latent.
 
-    Concatenates ``(z_now, z_goal)`` then maps back to ``dim``. Leading dims of
-    ``z_goal`` are preserved; ``z_now`` is broadcast to match.
+    ``forward(z)`` still returns only the next latent so
+    ``FBLeWM.imagine_forward`` can recurse unchanged. Training uses
+    ``forward_with_action(z) -> (action_hat, latent_hat)``. Action is a
+    supervision target, never an input.
+    """
+
+    is_conditional = False
+    is_action_aligned = True
+
+    def __init__(
+        self,
+        dim: int = 192,
+        hidden_dim: int = 768,
+        depth: int = 2,
+        action_dim: int = 10,
+    ):
+        super().__init__(dim=dim, hidden_dim=hidden_dim, depth=depth)
+        action_dim = int(action_dim)
+        if action_dim <= 0:
+            raise ValueError(f"action_dim must be > 0, got {action_dim}")
+        self.action_dim = action_dim
+        self.action_head = nn.Linear(dim, action_dim)
+
+    def forward_with_action(self, z: torch.Tensor):
+        leading, features = self._forward_features(z)
+        latent = self.out_proj(self.out_norm(features)).reshape(*leading, self.dim)
+        action = self.action_head(features).reshape(*leading, self.action_dim)
+        return action, latent
+
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
+        return self.forward_with_action(z)[1]
+
+
+class SequentialActionCausalLatentImaginer(CausalLatentImaginer):
+    """Sequential action-aligned Forward: A=G(z), z_next=H(z, A).
+
+    ``forward(z)`` still returns only the next latent so
+    ``FBLeWM.imagine_forward`` can recurse unchanged. Training uses
+    ``predict_action`` / ``transition`` / ``forward_teacher_forced``.
+    Predicted action is an imagined-latent conditioner, never executed.
+    """
+
+    is_conditional = False
+    is_action_aligned = True
+    is_sequential_action = True
+
+    def __init__(
+        self,
+        dim: int = 192,
+        hidden_dim: int = 768,
+        depth: int = 2,
+        action_dim: int = 10,
+    ):
+        super().__init__(dim=dim, hidden_dim=hidden_dim, depth=depth)
+        action_dim = int(action_dim)
+        if action_dim <= 0:
+            raise ValueError(f"action_dim must be > 0, got {action_dim}")
+        self.action_dim = action_dim
+        self.hidden_dim = int(hidden_dim)
+        self.action_head = nn.Linear(dim, action_dim)
+        self.action_embed = nn.Linear(action_dim, dim)
+        self.fuse = nn.Linear(dim * 2, dim)
+        self.transition_blocks = nn.ModuleList(
+            [ResidualMLPBlock(dim, hidden_dim) for _ in range(depth)]
+        )
+
+    def predict_action(self, z: torch.Tensor) -> torch.Tensor:
+        leading, features = self._forward_features(z)
+        action = self.action_head(features).reshape(*leading, self.action_dim)
+        return action.to(dtype=z.dtype)
+
+    def transition(self, z: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
+        leading, state_feat = self._forward_features(z)
+        if action.shape[:-1] != leading:
+            raise ValueError(
+                f"action leading shape {tuple(action.shape[:-1])} "
+                f"incompatible with latent {tuple(leading)}"
+            )
+        if action.size(-1) != self.action_dim:
+            raise ValueError(
+                f"action last dim must equal imaginer.action_dim={self.action_dim}, "
+                f"got {int(action.size(-1))}"
+            )
+        action = action.reshape(-1, self.action_dim).to(
+            device=state_feat.device, dtype=state_feat.dtype
+        )
+        action_feat = self.action_embed(action)
+        fused = self.fuse(torch.cat([state_feat, action_feat], dim=-1))
+        for block in self.transition_blocks:
+            fused = block(fused)
+        latent = self.out_proj(self.out_norm(fused))
+        return latent.reshape(*leading, self.dim).to(dtype=z.dtype)
+
+    def forward_teacher_forced(self, z: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
+        return self.transition(z, action)
+
+    def forward_with_action(self, z: torch.Tensor):
+        action_hat = self.predict_action(z)
+        latent_hat = self.transition(z, action_hat)
+        return action_hat, latent_hat
+
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
+        return self.forward_with_action(z)[1]
+
+
+class BranchPreservingCausalLatentImaginer(nn.Module):
+    """History-conditioned multi-branch Forward: F_m([z_{t-1}, z_t]) -> z_{t+1}.
+
+    Shared trunk plus M linear heads. Recursion keeps branch identity fixed.
+    ``forward`` is an alias of ``forward_branches`` and does not accept unary
+    ``(..., D)`` latents.
+    """
+
+    is_conditional = False
+    is_action_aligned = False
+    is_sequential_action = False
+    is_branch_preserving = True
+    history_size = 2
+
+    def __init__(
+        self,
+        dim: int = 192,
+        hidden_dim: int = 768,
+        depth: int = 2,
+        num_branches: int = 4,
+    ):
+        super().__init__()
+        num_branches = int(num_branches)
+        if num_branches < 1:
+            raise ValueError(f"num_branches must be >= 1, got {num_branches}")
+        self.dim = int(dim)
+        self.hidden_dim = int(hidden_dim)
+        self.num_branches = num_branches
+        self.history_fuse = nn.Linear(self.dim * self.history_size, self.dim)
+        self.blocks = nn.ModuleList(
+            [ResidualMLPBlock(self.dim, hidden_dim) for _ in range(depth)]
+        )
+        self.out_norm = nn.LayerNorm(self.dim)
+        self.branch_heads = nn.ModuleList(
+            [nn.Linear(self.dim, self.dim) for _ in range(num_branches)]
+        )
+
+    def _history_features(
+        self, history: torch.Tensor
+    ) -> tuple[tuple[int, ...], torch.Tensor]:
+        """Encode ``(..., 2, D)`` history. Returns ``(leading_shape, features(N, D))``."""
+        if history.size(-1) != self.dim:
+            raise ValueError(
+                f"{type(self).__name__} expects last dim={self.dim}, "
+                f"got {tuple(history.shape)}"
+            )
+        if history.ndim < 2 or history.size(-2) != self.history_size:
+            raise ValueError(
+                f"{type(self).__name__} expects (..., {self.history_size}, "
+                f"{self.dim}), got {tuple(history.shape)}"
+            )
+        leading = history.shape[:-2]
+        x = history.reshape(-1, self.history_size * self.dim)
+        x = self.history_fuse(x)
+        for block in self.blocks:
+            x = block(x)
+        x = self.out_norm(x)
+        return leading, x
+
+    def forward_branches(self, history: torch.Tensor) -> torch.Tensor:
+        """Predict all branch latents. ``history``: ``(..., 2, D)`` -> ``(..., M, D)``."""
+        leading, features = self._history_features(history)
+        heads = [head(features) for head in self.branch_heads]
+        latents = torch.stack(heads, dim=1)
+        return latents.reshape(*leading, self.num_branches, self.dim).to(
+            dtype=history.dtype
+        )
+
+    def forward_assigned(self, history_by_branch: torch.Tensor) -> torch.Tensor:
+        """Apply head ``m`` only to history ``[..., m, :, :]``.
+
+        Input ``(..., M, 2, D)`` -> ``(..., M, D)``.
+        """
+        if history_by_branch.size(-1) != self.dim:
+            raise ValueError(
+                f"{type(self).__name__} expects last dim={self.dim}, "
+                f"got {tuple(history_by_branch.shape)}"
+            )
+        if history_by_branch.ndim < 3 or history_by_branch.size(-2) != self.history_size:
+            raise ValueError(
+                f"{type(self).__name__}.forward_assigned expects "
+                f"(..., M, {self.history_size}, {self.dim}), "
+                f"got {tuple(history_by_branch.shape)}"
+            )
+        if history_by_branch.size(-3) != self.num_branches:
+            raise ValueError(
+                f"{type(self).__name__}.forward_assigned expects M="
+                f"{self.num_branches} at dim -3, got {tuple(history_by_branch.shape)}"
+            )
+        leading = history_by_branch.shape[:-3]
+        flat = history_by_branch.reshape(-1, self.num_branches, self.history_size, self.dim)
+        n = flat.size(0)
+        _, features = self._history_features(
+            flat.reshape(n * self.num_branches, self.history_size, self.dim)
+        )
+        features = features.reshape(n, self.num_branches, self.dim)
+        heads = [
+            self.branch_heads[m](features[:, m]) for m in range(self.num_branches)
+        ]
+        latents = torch.stack(heads, dim=1)
+        return latents.reshape(*leading, self.num_branches, self.dim).to(
+            dtype=history_by_branch.dtype
+        )
+
+    def forward(self, history: torch.Tensor) -> torch.Tensor:
+        return self.forward_branches(history)
+
+
+class ConditionalLatentImaginer(nn.Module):
+    """Conditional imaginer: out <- B(anchor, g).
+
+    Used by now-B (anchor=z_now), pred_goal, and fixed_bridge
+    (anchor=predicted latent P).
+    Concatenates ``(anchor, g)`` then maps back to ``dim``.
     """
 
     is_conditional = True

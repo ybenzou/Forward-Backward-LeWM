@@ -79,3 +79,56 @@ def load_fblewm_checkpoint(name: str, cache_dir: str | None = None):
             f"{missing_imag[:8]}..."
         )
     return model
+
+
+def load_trm_head(name: str, cache_dir: str | None = None):
+    """Load a standalone TRM head artifact without touching FBLeWM weights."""
+    ensure_repo_on_path()
+    from baselines.trm import TRMHead
+    from stable_worldmodel.wm.utils import get_cache_dir
+
+    cache = Path(get_cache_dir(cache_dir, sub_folder="checkpoints"))
+    searched = [
+        Path(name),
+        cache / name,
+        ROOT / ".stable-wm" / "checkpoints" / name,
+    ]
+    pt_path = next((p for p in searched if p.is_file()), None)
+    if pt_path is None:
+        raise FileNotFoundError(
+            f"TRM head not found: {name}\n"
+            + "\n".join(f"    - {p}" for p in searched)
+        )
+
+    payload = torch.load(pt_path, map_location="cpu")
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"TRM artifact must be a dict, got {type(payload)!r}")
+    state = payload.get("state_dict", payload.get("model_state_dict"))
+    if not isinstance(state, dict):
+        raise RuntimeError(f"TRM artifact missing state_dict: {pt_path}")
+    metadata = dict(payload.get("metadata", {}))
+    for key in (
+        "latent_dim",
+        "dim",
+        "hidden_dim",
+        "task",
+        "label_type",
+        "base_checkpoint_sha256",
+        "dataset_sha256",
+    ):
+        if key in payload and key not in metadata:
+            metadata[key] = payload[key]
+
+    dim = int(metadata.get("latent_dim", metadata.get("dim", 192)))
+    architecture = metadata.get("architecture", {})
+    hidden_dim = int(
+        metadata.get("hidden_dim", architecture.get("hidden_dim", 256))
+    )
+    head = TRMHead(latent_dim=dim, hidden_dim=hidden_dim)
+    missing, unexpected = head.load_state_dict(state, strict=True)
+    if missing or unexpected:
+        raise RuntimeError(
+            f"TRM state mismatch missing={missing} unexpected={unexpected}"
+        )
+    metadata["artifact_path"] = str(pt_path.resolve())
+    return head, metadata

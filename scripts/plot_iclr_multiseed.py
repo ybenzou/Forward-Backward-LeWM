@@ -4,7 +4,8 @@
 Reads outputs/diag/iclr_bar/multiseed/{task}/seed_*/summary.txt
   and outputs/diag/iclr_bar/longcem/h10/{task}/seed_*/summary.txt
 Writes outputs/figures/fig_iclr_multiseed.png
-     and outputs/figures/fig_iclr_multiseed_delta.png
+     and paper/figures/fig_iclr_multiseed.png
+     plus the matching delta figures.
 Does not overwrite fig_*_pred_goal*.png or fig_*_backward_zz.png.
 """
 
@@ -25,9 +26,12 @@ ROOT = Path(__file__).resolve().parents[1]
 MULTI_ROOT = ROOT / "outputs" / "diag" / "iclr_bar" / "multiseed"
 LONGCEM_ROOT = ROOT / "outputs" / "diag" / "iclr_bar" / "longcem"
 FIG_DIR = ROOT / "outputs" / "figures"
+PAPER_FIG_DIR = ROOT / "paper" / "figures"
 OFFSETS = (25, 50, 75, 100)
-TASKS = ("pusht", "tworoom")
-TASK_TITLES = {"pusht": "PushT", "tworoom": "TwoRoom"}
+TASKS = ("pusht", "tworoom", "reacher")
+LONGCEM_TASKS = ("pusht", "tworoom")
+OPTIONAL_LONGCEM_TASKS = ("reacher",)
+TASK_TITLES = {"pusht": "PushT", "tworoom": "TwoRoom", "reacher": "Reacher"}
 SEEDS = tuple(range(42, 52))
 LONGCEM_HORIZON = 10
 
@@ -105,8 +109,11 @@ def load_matrix(root: Path) -> dict[str, dict[str, dict[int, np.ndarray]]]:
             out.setdefault(task, {}).setdefault(mode, {}).setdefault(offset, {})[
                 seed
             ] = float(parts["success_rate"])
-    if n_files != 20:
-        raise SystemExit(f"expected 20 summary.txt, found {n_files} under {root}")
+    expected = len(TASKS) * len(SEEDS)
+    if n_files != expected:
+        raise SystemExit(
+            f"expected {expected} summary.txt, found {n_files} under {root}"
+        )
     stacked: dict[str, dict[str, dict[int, np.ndarray]]] = {}
     for task in TASKS:
         if task not in out:
@@ -146,13 +153,20 @@ def load_longcem_official(
             raw.setdefault(task, {}).setdefault(offset, {})[seed] = float(
                 parts["success_rate"]
             )
-    if n_files != 20:
+    expected = len(LONGCEM_TASKS) * len(SEEDS)
+    n_kept = sum(
+        1
+        for path in sub.glob("*/seed_*/summary.txt")
+        if path.parts[-3] in LONGCEM_TASKS
+    )
+    if n_kept != expected:
         raise SystemExit(
-            f"expected 20 longcem h{horizon} summary.txt, found {n_files} under {sub}. "
+            f"expected {expected} longcem h{horizon} summary.txt for "
+            f"{LONGCEM_TASKS}, found {n_kept} under {sub}. "
             "Run: python scripts/run_iclr_longcem.py --horizons 10"
         )
     stacked: dict[str, dict[int, np.ndarray]] = {}
-    for task in TASKS:
+    for task in LONGCEM_TASKS:
         if task not in raw:
             raise SystemExit(f"missing longcem task {task} under {sub}")
         stacked[task] = {}
@@ -164,6 +178,19 @@ def load_longcem_official(
                     f"longcem h{horizon} {task} offset={offset} missing {missing}"
                 )
             stacked[task][offset] = np.array([by_seed[s] for s in SEEDS], dtype=float)
+    for task in OPTIONAL_LONGCEM_TASKS:
+        if task not in raw:
+            continue
+        complete = True
+        arrays: dict[int, np.ndarray] = {}
+        for offset in OFFSETS:
+            by_seed = raw[task].get(offset, {})
+            if any(s not in by_seed for s in SEEDS):
+                complete = False
+                break
+            arrays[offset] = np.array([by_seed[s] for s in SEEDS], dtype=float)
+        if complete:
+            stacked[task] = arrays
     return stacked
 
 
@@ -198,7 +225,7 @@ def aggregate(data, longcem=None) -> dict:
                 "max": float(d.max()),
                 "seeds": [float(v) for v in d],
             }
-        if longcem is not None:
+        if longcem is not None and task in longcem:
             rec["tasks"][task]["official_h10"] = {}
             rec["tasks"][task]["delta_vs_h10"] = {}
             for off in OFFSETS:
@@ -231,24 +258,26 @@ def _series(data, task: str, mode: str) -> tuple[np.ndarray, np.ndarray]:
 
 def plot_success(data, dest: Path, longcem=None) -> None:
     apply_publication_style(FigureStyle(font_size=15, axes_linewidth=2.0))
-    fig, axes = plt.subplots(1, 2, figsize=(11.6, 4.55), sharey=True)
+    fig, axes = plt.subplots(1, 3, figsize=(16.8, 4.55), sharey=True)
     x = np.array(OFFSETS, dtype=float)
     rng = np.random.default_rng(0)
-    panel = {"pusht": "a", "tworoom": "b"}
+    panel = {"pusht": "a", "tworoom": "b", "reacher": "c"}
     series = [
-        ("official", PALETTE["red_strong"], "LeWM ($h{=}5$)", 2, "s", "-"),
-        ("forward", PALETTE["blue_main"], "HAS ($h{=}5$)", 4, "o", "-"),
+        ("official", PALETTE["red_strong"], r"LeWM ($H{=}25$)", 2, "s", "-"),
+        ("forward", PALETTE["blue_main"], r"HAS ($H{=}25$)", 4, "o", "-"),
     ]
     if longcem is not None:
         series.insert(
             1,
-            ("official_h10", PALETTE["teal"], "LeWM ($h{=}10$)", 3, "^", "--"),
+            ("official_h10", PALETTE["teal"], r"Long-CEM ($H{=}50$)", 3, "^", "--"),
         )
 
     handles = labels = None
     for ax, task in zip(axes, TASKS):
         for key, color, label, z, marker, ls in series:
             if key == "official_h10":
+                if longcem is None or task not in longcem:
+                    continue
                 mu = np.array([mean_std(longcem[task][o])[0] for o in OFFSETS])
                 sd = np.array([mean_std(longcem[task][o])[1] for o in OFFSETS])
                 per_off = longcem[task]
@@ -283,7 +312,7 @@ def plot_success(data, dest: Path, longcem=None) -> None:
                 )
 
         ax.set_title(f"({panel[task]})  {TASK_TITLES[task]}", pad=8)
-        ax.set_xlabel("Goal offset")
+        ax.set_xlabel(r"Goal offset $o$")
         ax.set_xticks(list(OFFSETS))
         ax.set_xlim(17, 108)
         ax.set_ylim(-2, 104)
@@ -317,17 +346,17 @@ def plot_success(data, dest: Path, longcem=None) -> None:
 
 def plot_delta(data, dest: Path, longcem=None) -> None:
     apply_publication_style(FigureStyle(font_size=15, axes_linewidth=2.0))
-    fig, axes = plt.subplots(1, 2, figsize=(11.6, 4.55), sharey=False)
+    fig, axes = plt.subplots(1, 3, figsize=(16.8, 4.55), sharey=False)
     x = np.arange(len(OFFSETS), dtype=float)
     rng = np.random.default_rng(1)
-    panel = {"pusht": "a", "tworoom": "b"}
+    panel = {"pusht": "a", "tworoom": "b", "reacher": "c"}
     grouped = longcem is not None
     width = 0.36 if grouped else 0.62
 
     for ax, task in zip(axes, TASKS):
-        series = [("official", PALETTE["blue_main"], r"HAS $-$ LeWM $h{=}5$")]
-        if grouped:
-            series.append(("official_h10", PALETTE["teal"], r"HAS $-$ LeWM $h{=}10$"))
+        series = [("official", PALETTE["blue_main"], r"HAS $-$ LeWM ($H{=}25$)")]
+        if grouped and longcem is not None and task in longcem:
+            series.append(("official_h10", PALETTE["teal"], r"HAS $-$ Long-CEM ($H{=}50$)"))
         n_s = len(series)
         for s_i, (key, color, label) in enumerate(series):
             means = []
@@ -388,12 +417,15 @@ def plot_delta(data, dest: Path, longcem=None) -> None:
         ax.set_title(f"({panel[task]})  {TASK_TITLES[task]}", pad=8)
         ax.set_xticks(x)
         ax.set_xticklabels([str(o) for o in OFFSETS])
-        ax.set_xlabel("Goal offset")
+        ax.set_xlabel(r"Goal offset $o$")
         if task == "pusht":
             ax.set_ylabel("Success gap (pp)")
             ax.set_ylim(-18, 44)
             ax.set_yticks([-10, 0, 10, 20, 30, 40])
             ax.legend(loc="upper right", handlelength=1.2)
+        elif task == "reacher":
+            ax.set_ylim(-10, 28)
+            ax.set_yticks([-10, 0, 10, 20])
         else:
             ax.set_ylim(-18, 86)
             ax.set_yticks([0, 20, 40, 60, 80])
@@ -420,34 +452,37 @@ def main() -> int:
     for task in TASKS:
         print(f"  {TASK_TITLES[task]}")
         for mode, name in (
-            ("official", "LeWM h=5"),
-            ("forward", "HAS  h=5"),
+            ("official", "LeWM H=25"),
+            ("forward", "HAS  H=25"),
         ):
             bits = []
             for off in OFFSETS:
                 mu, sd = mean_std(data[task][mode][off])
                 bits.append(f"{off}:{mu:.1f}±{sd:.1f}")
             print(f"    {name:10}  " + "  ".join(bits))
-        bits = []
-        for off in OFFSETS:
-            mu, sd = mean_std(longcem[task][off])
-            bits.append(f"{off}:{mu:.1f}±{sd:.1f}")
-        print(f"    {'LeWM h=10':10}  " + "  ".join(bits))
+        if longcem is not None and task in longcem:
+            bits = []
+            for off in OFFSETS:
+                mu, sd = mean_std(longcem[task][off])
+                bits.append(f"{off}:{mu:.1f}±{sd:.1f}")
+            print(f"    {'Long-CEM':10}  " + "  ".join(bits))
         bits = []
         for off in OFFSETS:
             d = data[task]["forward"][off] - data[task]["official"][off]
             mu, sd = mean_std(d)
             bits.append(f"{off}:{mu:+.1f}±{sd:.1f}")
-        print(f"    {'Δ vs h=5':10}  " + "  ".join(bits))
-        bits = []
-        for off in OFFSETS:
-            d = data[task]["forward"][off] - longcem[task][off]
-            mu, sd = mean_std(d)
-            bits.append(f"{off}:{mu:+.1f}±{sd:.1f}")
-        print(f"    {'Δ vs h=10':10}  " + "  ".join(bits))
+            print(f"    {'Δ vs H=25':10}  " + "  ".join(bits))
+        if longcem is not None and task in longcem:
+            bits = []
+            for off in OFFSETS:
+                d = data[task]["forward"][off] - longcem[task][off]
+                mu, sd = mean_std(d)
+                bits.append(f"{off}:{mu:+.1f}±{sd:.1f}")
+            print(f"    {'Δ vs H=50':10}  " + "  ".join(bits))
 
-    plot_success(data, FIG_DIR / "fig_iclr_multiseed", longcem=longcem)
-    plot_delta(data, FIG_DIR / "fig_iclr_multiseed_delta", longcem=longcem)
+    for dest_dir in (FIG_DIR, PAPER_FIG_DIR):
+        plot_success(data, dest_dir / "fig_iclr_multiseed", longcem=longcem)
+        plot_delta(data, dest_dir / "fig_iclr_multiseed_delta", longcem=longcem)
     return 0
 
 

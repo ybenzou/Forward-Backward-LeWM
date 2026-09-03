@@ -51,7 +51,8 @@ forward_imaginer:
   depth: 2
 
 # Default is unary B (encoder/pred). Pipeline overrides this to
-# ConditionalLatentImaginer when loss.backward.target=now.
+# ConditionalLatentImaginer when loss.backward.target=now, pred_goal, or fixed_bridge.
+backward_anchor: null
 backward_imaginer:
   _target_: module.CausalLatentImaginer
   dim: ${embed_dim}

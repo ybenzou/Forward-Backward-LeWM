@@ -17,6 +17,13 @@ def test_elapsed_past_offset_is_zero():
     assert compute_imagine_steps(25, 25, 25, 5) == 0
 
 
+def test_depth_cap_is_not_applied_in_schedule():
+    """Cap is eval-time imagine_backward only; k(t) schedule stays exact."""
+    assert compute_imagine_steps(50, 0, 25, 5) == 5
+    assert compute_imagine_steps(75, 0, 25, 5) == 10
+    assert compute_imagine_steps(100, 0, 25, 5) == 15
+
+
 def test_non_divisible_raises():
     with pytest.raises(ValueError):
         compute_imagine_steps(76, 0, 25, 5)

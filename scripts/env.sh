@@ -18,6 +18,7 @@ mkdir -p \
   "$FBLEWM_ROOT/logs/runs" \
   "$FBLEWM_ROOT/outputs/hydra" \
   "$FBLEWM_ROOT/outputs/eval" \
+  "$FBLEWM_ROOT/outputs/diag" \
   "$FBLEWM_ROOT/outputs/checkpoints" \
   "$FBLEWM_ROOT/data/incoming" \
   "$FBLEWM_ROOT/data/extracted" \

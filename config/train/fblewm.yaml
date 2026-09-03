@@ -44,16 +44,30 @@ loss:
       knots: 17
       num_proj: 1024
   # Imaginer weights (explicit, not hidden).
+  # variant=latent: F(p)->z  (legacy)
+  # variant=action_aligned: F(p)->(A_hat, z_hat); action is a target only.
+  # variant=sequential_action: A=G(p); z'=H(p,A); teacher uses A_tgt.
+  # variant=branch_preserving: F_m([z_{t-1},z_t])->z_{t+1}; WTA step/roll.
   forward:
+    variant: latent
     weight: 1.0
     roll_weight: 1.0
+    action_weight: 1.0
+    teacher_weight: 1.0
+    branches: 4
   backward:
     weight: 1.0
     roll_weight: 1.0
     # pred: unary B(z_{t+1}) -> p_t
     # encoder: unary B(z_{t+1}) -> z_t
-    # now: conditional g <- B(z0, g) in z-space (swaps in ConditionalLatentImaginer)
+    # now: conditional g <- B(z0, g) in z-space
+    # pred_goal: conditional G <- B(P, z_later), supervise G ≈ z at P's time
+    # fixed_bridge: conditional B(P1, z_later) with frozen P1; step/roll MSE only
     target: pred
+    # p_noise / goal_rank_* are used only by pred_goal, not by fixed_bridge.
+    p_noise: 0.1
+    goal_rank_weight: 0.5
+    goal_margin: 0.1
 
 wandb:
   enabled: false

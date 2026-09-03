@@ -1,4 +1,12 @@
-"""FBLeWM: official LeWM + detached Forward/Backward Causal Latent Imaginers."""
+"""FBLeWM: official LeWM + detached Forward/Backward Causal Latent Imaginers.
+
+Forward imaginer may be unary (latent-only), parallel action-aligned
+(``F(p) -> (A_hat, z_hat)``), sequential (``A=G(p); z'=H(p,A)``), or
+branch-preserving (``F_m([z_{t-1}, z_t]) -> z_{t+1}``). Unary planning
+still calls ``forward(z)``. Branch-preserving scoring uses
+``imagine_forward_branches`` and best-of-M terminal cost. Predicted
+actions are never executed.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +17,7 @@ from torch import nn
 
 from planning import (
     ALL_PLANNING_MODES,
+    FUSION_MODES,
     coarsen_backward_steps,
     resolve_fusion_alpha,
     split_meet_steps,
@@ -45,6 +54,7 @@ class FBLeWM(nn.Module):
         backward_imaginer,
         projector=None,
         pred_proj=None,
+        backward_anchor=None,
     ):
         super().__init__()
 
@@ -60,6 +70,35 @@ class FBLeWM(nn.Module):
         self._goal_offset = 25
         self._switch_remain_threshold = 50
         self._switch_offset_cutoff = 100
+        self._backward_depth_cap = None
+        self._forward_depth_override = None
+        self.backward_anchor = self._normalize_backward_anchor(backward_anchor)
+        # Runtime-only TRM attachment. Bypass nn.Module registration so loading,
+        # saving, and state_dict keys of all existing checkpoints stay unchanged.
+        object.__setattr__(self, "_trm_head", None)
+        self._trm_weight = 1.0
+        self._trm_eps = 1e-8
+        self._trm_metadata = None
+
+    def _effective_backward_anchor(self):
+        if self.backward_anchor is not None:
+            return self.backward_anchor
+        if self._is_conditional_backward():
+            return "obs"
+        return None
+
+    @staticmethod
+    def _normalize_backward_anchor(anchor):
+        if anchor is None or anchor == "" or anchor == "none":
+            return None
+        anchor = str(anchor)
+        if anchor in ("obs", "now"):
+            return "obs"
+        if anchor in ("pred", "pred_goal"):
+            return "pred"
+        raise ValueError(
+            f"backward_anchor must be none/obs/pred, got {anchor!r}"
+        )
 
     def set_planning_mode(self, mode: str) -> None:
         if mode not in PLANNING_MODES:
@@ -74,11 +113,107 @@ class FBLeWM(nn.Module):
     def set_goal_offset(self, goal_offset: int) -> None:
         self._goal_offset = int(goal_offset)
 
+    def set_trm_head(
+        self,
+        head: nn.Module,
+        *,
+        weight: float = 1.0,
+        eps: float = 1e-8,
+        metadata: dict | None = None,
+    ) -> None:
+        """Attach an eval-only TRM head without changing the model state dict."""
+        if not isinstance(head, nn.Module):
+            raise TypeError(f"TRM head must be nn.Module, got {type(head)!r}")
+        weight = float(weight)
+        eps = float(eps)
+        if not torch.isfinite(torch.tensor(weight)):
+            raise ValueError(f"TRM weight must be finite, got {weight}")
+        if eps <= 0:
+            raise ValueError(f"TRM eps must be > 0, got {eps}")
+
+        latent_dim = getattr(head, "latent_dim", getattr(head, "dim", None))
+        expected_dim = getattr(self.forward_imaginer, "dim", None)
+        if latent_dim is not None and expected_dim is not None:
+            if int(latent_dim) != int(expected_dim):
+                raise ValueError(
+                    f"TRM latent dim {int(latent_dim)} != model dim {int(expected_dim)}"
+                )
+
+        device = next(self.parameters()).device
+        head = head.to(device=device).eval()
+        head.requires_grad_(False)
+        object.__setattr__(self, "_trm_head", head)
+        self._trm_weight = weight
+        self._trm_eps = eps
+        self._trm_metadata = dict(metadata or {})
+
+    def clear_trm_head(self) -> None:
+        """Remove the runtime-only TRM head."""
+        object.__setattr__(self, "_trm_head", None)
+        self._trm_metadata = None
+
     def set_switch_remain_threshold(self, threshold: int) -> None:
         self._switch_remain_threshold = int(threshold)
 
     def set_switch_offset_cutoff(self, cutoff: int) -> None:
         self._switch_offset_cutoff = int(cutoff)
+
+    def set_forward_depth_override(self, steps) -> None:
+        """Eval-only: replace Forward ``imagine_steps`` with a fixed ``k``.
+
+        ``None`` keeps the dynamic schedule. Training does not call this.
+        Official / Backward / fusion costs are unchanged.
+        """
+        if steps is None or steps == "" or steps == "none":
+            self._forward_depth_override = None
+            return
+        steps = int(steps)
+        if steps < 0:
+            raise ValueError(f"forward_depth_override must be >= 0, got {steps}")
+        self._forward_depth_override = steps
+
+    @property
+    def forward_depth_override(self):
+        return self._forward_depth_override
+
+    def _apply_forward_depth_override(self, steps):
+        override = self._forward_depth_override
+        if override is None:
+            return steps
+        override = int(override)
+        if steps is None or not torch.is_tensor(steps):
+            return override
+        return torch.full_like(steps, override)
+
+    def set_backward_depth_cap(self, cap) -> None:
+        """Eval-only: cap pred_goal recursion to min(k, cap). None disables.
+
+        k=0 is never changed. Training does not call this.
+        """
+        if cap is None or cap == "" or cap == "none":
+            self._backward_depth_cap = None
+            return
+        cap = int(cap)
+        if cap < 0:
+            raise ValueError(f"backward_depth_cap must be >= 0, got {cap}")
+        self._backward_depth_cap = cap
+
+    @property
+    def backward_depth_cap(self):
+        return self._backward_depth_cap
+
+    def _apply_pred_goal_depth_cap(self, steps):
+        """Clamp pred_goal recursion depth. Leaves k=0 and non-pred anchors untouched."""
+        cap = self._backward_depth_cap
+        if cap is None or self._effective_backward_anchor() != "pred":
+            return steps
+        cap = int(cap)
+        if not torch.is_tensor(steps):
+            k = _as_int_steps(steps)
+            if k == 0:
+                return 0
+            return min(k, cap)
+        return steps.clamp(max=cap)
 
     @property
     def planning_mode(self) -> str:
@@ -159,12 +294,77 @@ class FBLeWM(nn.Module):
             return self._recurse_imaginer_masked(self.forward_imaginer, z, steps)
         return self._recurse_imaginer(self.forward_imaginer, z, steps)
 
+    def _is_branch_preserving_forward(self) -> bool:
+        return bool(getattr(self.forward_imaginer, "is_branch_preserving", False))
+
+    def _normalize_branch_steps(self, steps, leading_shape, device) -> torch.Tensor:
+        """Broadcast scalar/tensor steps to ``leading_shape`` as int64 >= 0."""
+        if not torch.is_tensor(steps):
+            n = _as_int_steps(steps)
+            return torch.full(leading_shape, n, device=device, dtype=torch.long)
+        steps = steps.to(device=device, dtype=torch.long)
+        target_ndim = len(leading_shape)
+        while steps.ndim < target_ndim:
+            steps = steps.unsqueeze(-1)
+        if steps.ndim == target_ndim + 1:
+            if steps.size(-1) != 1:
+                raise ValueError(
+                    "steps last dim must be 1 when matching history leading ndim, "
+                    f"got {tuple(steps.shape)}"
+                )
+            steps = steps.squeeze(-1)
+        if tuple(steps.shape) != tuple(leading_shape):
+            steps = steps.expand(leading_shape)
+        if steps.numel() and bool((steps < 0).any()):
+            raise ValueError(
+                f"imagine steps must be >= 0, got min={int(steps.min().item())}"
+            )
+        return steps.contiguous()
+
+    def imagine_forward_branches(self, history: torch.Tensor, steps=1) -> torch.Tensor:
+        """Branch-consistent recursion. ``history``: ``(..., 2, D)`` -> ``(..., M, D)``."""
+        imaginer = self.forward_imaginer
+        if not self._is_branch_preserving_forward():
+            raise ValueError(
+                "imagine_forward_branches requires BranchPreservingCausalLatentImaginer"
+            )
+        if history.size(-2) != getattr(imaginer, "history_size", 2):
+            raise ValueError(
+                "imagine_forward_branches expects history (..., 2, D), "
+                f"got {tuple(history.shape)}"
+            )
+        leading = history.shape[:-2]
+        num_branches = int(imaginer.num_branches)
+        dim = history.size(-1)
+        steps_t = self._normalize_branch_steps(steps, leading, history.device)
+        max_k = int(steps_t.max().item()) if steps_t.numel() else 0
+        branch_hist = (
+            history.unsqueeze(-3).expand(*leading, num_branches, 2, dim).contiguous()
+        )
+        endpoint = (
+            history[..., -1, :]
+            .unsqueeze(-2)
+            .expand(*leading, num_branches, dim)
+            .contiguous()
+        )
+        if max_k == 0:
+            return endpoint
+        for step_index in range(max_k):
+            nxt = imaginer.forward_assigned(branch_hist)
+            active = steps_t > step_index
+            mask_ep = active.reshape(*leading, 1, 1).expand_as(endpoint)
+            endpoint = torch.where(mask_ep, nxt, endpoint)
+            shifted = torch.cat([branch_hist[..., 1:, :], nxt.unsqueeze(-2)], dim=-2)
+            mask_h = active.reshape(*leading, 1, 1, 1).expand_as(branch_hist)
+            branch_hist = torch.where(mask_h, shifted, branch_hist)
+        return endpoint
+
     def _is_conditional_backward(self) -> bool:
         return bool(getattr(self.backward_imaginer, "is_conditional", False))
 
     def _coarsen_backward_steps(self, steps, *, max_steps: int = 3, block: int = 5):
-        """Cap/coarsen k for conditional B; leave legacy unary B on the fine schedule."""
-        if not self._is_conditional_backward():
+        """Cap/coarsen k only for obs-anchored now-B; pred_goal keeps the fine schedule."""
+        if self._effective_backward_anchor() != "obs":
             return steps
         if not torch.is_tensor(steps):
             return coarsen_backward_steps(steps, max_steps=max_steps, block=block)
@@ -225,7 +425,7 @@ class FBLeWM(nn.Module):
     def imagine_backward(
         self, z_goal: torch.Tensor, steps=1, z_now: torch.Tensor | None = None
     ) -> torch.Tensor:
-        """Roll goal backward. Conditional B: g <- B(z_now, g) with z_now frozen."""
+        """Roll goal backward. Conditional B: g <- B(anchor, g) with anchor frozen."""
         if not self._is_conditional_backward():
             if torch.is_tensor(steps) and steps.numel() != 1:
                 return self._recurse_imaginer_masked(
@@ -234,6 +434,7 @@ class FBLeWM(nn.Module):
             return self._recurse_imaginer(self.backward_imaginer, z_goal, steps)
 
         steps = self._coarsen_backward_steps(steps)
+        steps = self._apply_pred_goal_depth_cap(steps)
         if not torch.is_tensor(steps):
             if _as_int_steps(steps) == 0:
                 return z_goal
@@ -242,8 +443,8 @@ class FBLeWM(nn.Module):
 
         if z_now is None:
             raise ValueError(
-                "conditional backward imaginer requires z_now "
-                "(current observation latent); got z_now=None"
+                "conditional backward imaginer requires an anchor latent "
+                "(z_now for now-B, predicted endpoint for pred_goal); got z_now=None"
             )
         if torch.is_tensor(steps) and steps.numel() != 1:
             return self._recurse_conditional_backward_masked(z_now, z_goal, steps)
@@ -352,6 +553,38 @@ class FBLeWM(nn.Module):
             target = target.expand_as(pred)
         return (pred - target.detach()).pow(2).sum(dim=-1)
 
+    @staticmethod
+    def _candidate_zscore(cost: torch.Tensor, eps: float) -> torch.Tensor:
+        """Standardize independently over each current CEM candidate pool."""
+        if cost.ndim != 2:
+            raise ValueError(f"candidate cost must have shape (B, S), got {cost.shape}")
+        mean = cost.mean(dim=-1, keepdim=True)
+        std = cost.std(dim=-1, keepdim=True, unbiased=False)
+        return (cost - mean) / (std + float(eps))
+
+    def _trm_terminal_cost(
+        self, endpoint: torch.Tensor, z_goal: torch.Tensor
+    ) -> torch.Tensor:
+        head = self._trm_head
+        if head is None:
+            raise RuntimeError(
+                f"planning_mode={self._planning_mode!r} requires set_trm_head(...)"
+            )
+        try:
+            head_dtype = next(head.parameters()).dtype
+        except StopIteration:
+            head_dtype = endpoint.dtype
+        cost = head(
+            endpoint.to(dtype=head_dtype),
+            z_goal.detach().to(dtype=head_dtype),
+        )
+        if cost.shape != endpoint.shape[:-1]:
+            raise ValueError(
+                f"TRM head returned shape {tuple(cost.shape)}, "
+                f"expected {tuple(endpoint.shape[:-1])}"
+            )
+        return cost
+
     def _as_bs_latent(self, goal_emb: torch.Tensor, endpoint: torch.Tensor) -> torch.Tensor:
         """Normalize goal embedding to (B, S, D) matching predictor endpoint."""
         z = goal_emb
@@ -378,13 +611,34 @@ class FBLeWM(nn.Module):
         return endpoint.detach()
 
     def _forward_cost(
-        self, endpoint: torch.Tensor, z_goal: torch.Tensor, steps
+        self, endpoint: torch.Tensor, z_goal: torch.Tensor, steps, *, history=None
     ) -> torch.Tensor:
+        if not self._is_branch_preserving_forward():
+            if steps is None:
+                imagined = endpoint
+            else:
+                imagined = self.imagine_forward(endpoint, steps)
+            return self._latent_mse(imagined, z_goal)
+        if history is None:
+            raise ValueError(
+                "branch_preserving forward cost requires history (..., 2, D) "
+                "from predicted_emb[..., -2:, :]"
+            )
+        official = self._latent_mse(endpoint, z_goal)
         if steps is None:
-            imagined = endpoint
-        else:
-            imagined = self.imagine_forward(endpoint, steps)
-        return self._latent_mse(imagined, z_goal)
+            return official
+        branch_ep = self.imagine_forward_branches(history, steps)
+        goal = z_goal
+        if goal.ndim == branch_ep.ndim - 1:
+            goal = goal.unsqueeze(-2)
+        if goal.shape != branch_ep.shape:
+            goal = goal.expand_as(branch_ep)
+        dist_m = (branch_ep - goal.detach()).pow(2).sum(dim=-1)
+        branch_cost = dist_m.min(dim=-1).values
+        steps_t = self._normalize_branch_steps(
+            steps, endpoint.shape[:-1], endpoint.device
+        )
+        return torch.where(steps_t == 0, official, branch_cost)
 
     def _backward_cost(
         self,
@@ -464,17 +718,52 @@ class FBLeWM(nn.Module):
             info_dict["goal_emb"] = self._encode_goal(info_dict)
 
         info_dict = self.rollout(info_dict, action_candidates)
-        endpoint = info_dict["predicted_emb"][..., -1, :]  # (B, S, D)
+        predicted = info_dict["predicted_emb"]
+        endpoint = predicted[..., -1, :]  # (B, S, D)
         z_goal = self._as_bs_latent(info_dict["goal_emb"], endpoint)
+        history = None
+        if self._is_branch_preserving_forward() and mode == "forward":
+            if predicted.size(-2) < 2:
+                raise ValueError(
+                    "branch_preserving forward cost needs at least 2 predicted "
+                    f"latents, got T={int(predicted.size(-2))}"
+                )
+            history = predicted[..., -2:, :]
+
+        if mode in ("trm_replace", "trm_hybrid"):
+            c_trm = self._trm_terminal_cost(endpoint, z_goal)
+            if mode == "trm_replace":
+                return c_trm
+            c_lat = self._latent_mse(endpoint, z_goal)
+            return self._candidate_zscore(
+                c_lat, self._trm_eps
+            ) + self._trm_weight * self._candidate_zscore(c_trm, self._trm_eps)
 
         if mode == "forward":
-            return self._forward_cost(endpoint, z_goal, imagine_steps)
+            return self._forward_cost(
+                endpoint,
+                z_goal,
+                self._apply_forward_depth_override(imagine_steps),
+                history=history,
+            )
 
         if mode == "official":
             return self.criterion(info_dict)
 
-        # Remaining modes may use B; z_now is the frozen current observation.
-        z_now = self._current_now_latent(info_dict, endpoint)
+        if mode in FUSION_MODES and self._is_branch_preserving_forward():
+            raise ValueError(
+                "branch_preserving does not support planning mode "
+                f"{mode!r}; use official or forward (backward is also allowed)"
+            )
+
+        # now-B anchors on the current observation; pred_goal anchors on P.
+        if self._effective_backward_anchor() == "pred":
+            z_now = endpoint
+        else:
+            z_now = self._current_now_latent(info_dict, endpoint)
+
+        if mode == "backward" and self._effective_backward_anchor() == "pred":
+            return self._backward_cost(endpoint, z_goal, imagine_steps, z_now=endpoint)
 
         if mode == "meet":
             return self._meet_cost(endpoint, z_goal, imagine_steps, z_now=z_now)

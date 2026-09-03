@@ -4,7 +4,13 @@ import torch
 from torch import nn
 
 from fblewm import FBLeWM
-from module import CausalLatentImaginer, ConditionalLatentImaginer
+from module import (
+    ActionAlignedCausalLatentImaginer,
+    BranchPreservingCausalLatentImaginer,
+    CausalLatentImaginer,
+    ConditionalLatentImaginer,
+    SequentialActionCausalLatentImaginer,
+)
 
 
 class _TinyEnc(nn.Module):
@@ -57,6 +63,42 @@ def _tiny_model(dim=192):
     )
 
 
+def _tiny_action_aligned_model(dim=192, action_dim=10):
+    return FBLeWM(
+        encoder=_TinyEnc(dim),
+        predictor=_TinyPred(dim),
+        action_encoder=_TinyAct(dim),
+        forward_imaginer=ActionAlignedCausalLatentImaginer(
+            dim=dim, hidden_dim=64, depth=1, action_dim=action_dim
+        ),
+        backward_imaginer=CausalLatentImaginer(dim=dim, hidden_dim=64, depth=1),
+    )
+
+
+def _tiny_sequential_model(dim=192, action_dim=10):
+    return FBLeWM(
+        encoder=_TinyEnc(dim),
+        predictor=_TinyPred(dim),
+        action_encoder=_TinyAct(dim),
+        forward_imaginer=SequentialActionCausalLatentImaginer(
+            dim=dim, hidden_dim=64, depth=1, action_dim=action_dim
+        ),
+        backward_imaginer=CausalLatentImaginer(dim=dim, hidden_dim=64, depth=1),
+    )
+
+
+def _tiny_branch_model(dim=192, num_branches=4):
+    return FBLeWM(
+        encoder=_TinyEnc(dim),
+        predictor=_TinyPred(dim),
+        action_encoder=_TinyAct(dim),
+        forward_imaginer=BranchPreservingCausalLatentImaginer(
+            dim=dim, hidden_dim=64, depth=1, num_branches=num_branches
+        ),
+        backward_imaginer=CausalLatentImaginer(dim=dim, hidden_dim=64, depth=1),
+    )
+
+
 def _tiny_conditional_model(dim=192):
     return FBLeWM(
         encoder=_TinyEnc(dim),
@@ -69,7 +111,20 @@ def _tiny_conditional_model(dim=192):
 
 def test_imaginer_conditional_flag():
     assert CausalLatentImaginer.is_conditional is False
+    assert CausalLatentImaginer.is_action_aligned is False
+    assert CausalLatentImaginer.is_sequential_action is False
     assert ConditionalLatentImaginer.is_conditional is True
+    assert ActionAlignedCausalLatentImaginer.is_action_aligned is True
+    assert ActionAlignedCausalLatentImaginer.is_conditional is False
+    assert ActionAlignedCausalLatentImaginer.is_sequential_action is False
+    assert SequentialActionCausalLatentImaginer.is_action_aligned is True
+    assert SequentialActionCausalLatentImaginer.is_sequential_action is True
+    assert SequentialActionCausalLatentImaginer.is_conditional is False
+    assert BranchPreservingCausalLatentImaginer.is_branch_preserving is True
+    assert BranchPreservingCausalLatentImaginer.is_action_aligned is False
+    assert BranchPreservingCausalLatentImaginer.is_sequential_action is False
+    assert BranchPreservingCausalLatentImaginer.is_conditional is False
+    assert BranchPreservingCausalLatentImaginer.history_size == 2
 
 
 def test_imaginer_preserves_leading_shape():
@@ -199,3 +254,47 @@ def test_cost_shape_for_all_modes():
             info_i["goal_emb"] = torch.randn(B, S, 1, 192)
         cost = m.get_cost(info_i, actions)
         assert cost.shape == (B, S), (mode, cost.shape)
+
+
+def test_branch_preserving_cost_shape_and_k0():
+    torch.manual_seed(0)
+    m = _tiny_branch_model(dim=16, num_branches=3)
+    B, S, H, A = 2, 4, 5, 10
+    pixels = torch.randn(B, S, 1, 3, 8, 8)
+    goal = torch.randn(B, S, 1, 3, 8, 8)
+    actions = torch.randn(B, S, H, A)
+    z_goal = m.encode({"pixels": goal[:, 0].clone()})["emb"]
+    goal_emb = z_goal.unsqueeze(1).expand(B, S, 1, z_goal.size(-1)).contiguous()
+    info = {"pixels": pixels, "goal": goal, "goal_emb": goal_emb}
+    m.set_planning_mode("official")
+    c_o = m.get_cost(dict(info), actions)
+    m.set_planning_mode("forward")
+    info_f = dict(info)
+    info_f["imagine_steps"] = torch.zeros(B, S, 1, dtype=torch.int64)
+    c_f = m.get_cost(info_f, actions)
+    assert c_o.shape == c_f.shape == (B, S)
+    assert torch.allclose(c_o, c_f, atol=1e-6, rtol=1e-5)
+
+
+def test_action_aligned_forward_returns_latent_only():
+    imag = ActionAlignedCausalLatentImaginer(dim=192, hidden_dim=64, depth=1, action_dim=10)
+    x = torch.randn(2, 3, 192)
+    y = imag(x)
+    a, z = imag.forward_with_action(x)
+    assert y.shape == x.shape
+    assert a.shape == (2, 3, 10)
+    assert z.shape == x.shape
+    assert torch.allclose(y, z)
+
+
+def test_sequential_action_forward_returns_latent_only():
+    imag = SequentialActionCausalLatentImaginer(
+        dim=192, hidden_dim=64, depth=1, action_dim=10
+    )
+    x = torch.randn(2, 3, 192)
+    y = imag(x)
+    a, z = imag.forward_with_action(x)
+    assert y.shape == x.shape
+    assert a.shape == (2, 3, 10)
+    assert z.shape == x.shape
+    assert torch.allclose(y, z)

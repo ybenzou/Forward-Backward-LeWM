@@ -98,6 +98,8 @@ class FBWorldModelPolicy(WorldModelPolicy):
         transform=None,
         switch_remain_threshold: int = 50,
         switch_offset_cutoff: int = 100,
+        backward_depth_cap=None,
+        forward_depth_override=None,
         **kwargs: Any,
     ) -> None:
         super().__init__(
@@ -111,6 +113,8 @@ class FBWorldModelPolicy(WorldModelPolicy):
         self.planning_mode = planning_mode
         self.switch_remain_threshold = int(switch_remain_threshold)
         self.switch_offset_cutoff = int(switch_offset_cutoff)
+        self.backward_depth_cap = backward_depth_cap
+        self.forward_depth_override = forward_depth_override
         self._elapsed_steps: np.ndarray | None = None
         self.last_imagine_steps: list[int] = []
         self.last_plan_branches: list[int] = []
@@ -129,6 +133,10 @@ class FBWorldModelPolicy(WorldModelPolicy):
             model.set_switch_remain_threshold(self.switch_remain_threshold)
         if hasattr(model, "set_switch_offset_cutoff"):
             model.set_switch_offset_cutoff(self.switch_offset_cutoff)
+        if hasattr(model, "set_backward_depth_cap") and self.backward_depth_cap is not None:
+            model.set_backward_depth_cap(self.backward_depth_cap)
+        if hasattr(model, "set_forward_depth_override"):
+            model.set_forward_depth_override(self.forward_depth_override)
 
     @property
     def plan_len_env(self) -> int:
@@ -249,6 +257,11 @@ class FBWorldModelPolicy(WorldModelPolicy):
                 )
                 for i in replan_idx
             ]
+            if (
+                self.planning_mode == "forward"
+                and self.forward_depth_override is not None
+            ):
+                ks = [int(self.forward_depth_override) for _ in ks]
             self.last_imagine_steps = list(ks)
             k_tensor = torch.tensor(ks, dtype=torch.int64).view(-1, 1)
             sliced["imagine_steps"] = k_tensor
@@ -271,7 +284,14 @@ class FBWorldModelPolicy(WorldModelPolicy):
                     -1, 1
                 )
 
-            if self.planning_mode in MODES_INJECT_BACKWARD_SUBGOAL:
+            if hasattr(model, "_effective_backward_anchor"):
+                skip_shared_subgoal = model._effective_backward_anchor() == "pred"
+            else:
+                skip_shared_subgoal = getattr(model, "backward_anchor", None) == "pred"
+            if (
+                self.planning_mode in MODES_INJECT_BACKWARD_SUBGOAL
+                and not skip_shared_subgoal
+            ):
                 # Precompute B(z_now, ... B(z_now, z_goal)) once per env (not per CEM sample).
                 with torch.no_grad():
                     goal_emb = self._encode_goal_pixels(sliced)  # (B, Tg, D)
@@ -286,7 +306,10 @@ class FBWorldModelPolicy(WorldModelPolicy):
                 self._next_init[idx_tensor] if self._next_init is not None else None
             )
 
+            elapsed_list = [int(self._elapsed_steps[i]) for i in replan_idx]
+            self._notify_cem_diag_begin(ks, elapsed_list)
             outputs = self.solver(sliced, init_action=sliced_init)
+            self._notify_cem_diag_end()
 
             actions = outputs["actions"]
             keep_horizon = self.cfg.receding_horizon
@@ -323,3 +346,21 @@ class FBWorldModelPolicy(WorldModelPolicy):
             action = self.process["action"].inverse_transform(action)
 
         return action
+
+    def _notify_cem_diag_begin(self, ks: list[int], elapsed_list: list[int]) -> None:
+        for cb in getattr(self.solver, "callbacks", []) or []:
+            begin = getattr(cb, "begin_replan", None)
+            if not callable(begin):
+                continue
+            begin(
+                ks=list(ks),
+                elapsed_steps=list(elapsed_list),
+                mode=self.planning_mode,
+                goal_offset=self.goal_offset,
+            )
+
+    def _notify_cem_diag_end(self) -> None:
+        for cb in getattr(self.solver, "callbacks", []) or []:
+            end = getattr(cb, "end_replan", None)
+            if callable(end):
+                end()

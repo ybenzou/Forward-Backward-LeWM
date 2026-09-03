@@ -5,6 +5,10 @@ from __future__ import annotations
 # Base modes from the original plan.
 BASE_MODES = ("official", "forward", "backward")
 
+# Opt-in post-hoc terminal metrics. Kept out of BASE_MODES so existing
+# train/eval commands retain their exact default mode set.
+TRM_MODES = ("trm_replace", "trm_hybrid")
+
 # Cost-level fusion / stage-switch / meet-in-the-middle (eval-only strategies).
 FUSION_MODES = (
     "fusion_avg05",  # C = 0.5 C_F + 0.5 C_B
@@ -17,7 +21,7 @@ FUSION_MODES = (
     "meet",  # MSE(F^{k_f}(P), B^{k_b}(z_goal)), k_f+k_b=k
 )
 
-ALL_PLANNING_MODES = BASE_MODES + FUSION_MODES
+ALL_PLANNING_MODES = BASE_MODES + FUSION_MODES + TRM_MODES
 
 # Modes that need both F^k and B^k inside get_cost (true final goal, not B-subgoal inject).
 MODES_NEED_DUAL_COST = frozenset(

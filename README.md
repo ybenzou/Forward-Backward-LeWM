@@ -60,6 +60,7 @@ Upload archives next to PushT under the **shared** data root
 |------|------|-------------|
 | TwoRoom | `tworoom.tar.zst` | `LeWM/data/tworoom.tar.zst` |
 | Cube | `cube_single_expert.tar.zst` | `LeWM/data/cube_single_expert.tar.zst` |
+| Reacher | `reacher.tar.zst` | `LeWM/data/reacher.tar.zst` |
 
 ```bash
 # After upload — joint train (B→z) then 16-cell eval
@@ -135,6 +136,8 @@ Expected: all tests pass; no GPU required for these unit tests.
 - `pred` — unary `B(z_{t+1}) → p_t` (default PushT)
 - `encoder` — unary `B(z_{t+1}) → z_t`
 - `now` — conditional `g ← B(z_now, g)` in z-space (default TwoRoom v2)
+- `pred_goal` — conditional `G ← B(P, z_later)` in z-space (TwoRoom v3)
+- `fixed_bridge` — conditional `B(P1, z_later)` with frozen predictor endpoint; step/roll MSE only, no noise/shuffle/rank
 
 Checkpoints go to **`fblewm_bp/`**; legacy **`fblewm/`** is protected and will not be overwritten.
 

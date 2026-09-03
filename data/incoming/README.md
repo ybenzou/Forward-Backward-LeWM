@@ -5,6 +5,7 @@
 ```text
 /home/yuanben/WorldModel/LeWM/data/tworoom.tar.zst
 /home/yuanben/WorldModel/LeWM/data/cube_single_expert.tar.zst
+/home/yuanben/WorldModel/LeWM/data/reacher.tar.zst
 ```
 
 This `FBLeWM/data/incoming/` directory is only a **fallback** if you already

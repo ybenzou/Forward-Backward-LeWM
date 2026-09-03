@@ -97,6 +97,20 @@ TASK_SPECS: Dict[str, TaskSpec] = {
         ),
         h5_basenames=("cube_single_expert.h5",),
     ),
+    "reacher": TaskSpec(
+        task="reacher",
+        train_data="dmc",
+        eval_config="reacher",
+        default_run_name="fblewm_reacher_v1",
+        default_backward_target="pred",
+        ready_names=("reacher.h5", "dmc/reacher_random.h5"),
+        dataset_links=("reacher.h5", "dmc/reacher_random.h5"),
+        zst_names=("reacher.tar.zst",),
+        hf_urls=(
+            "https://huggingface.co/datasets/quentinll/lewm-reacher/resolve/main/reacher.tar.zst",
+        ),
+        h5_basenames=("reacher.h5",),
+    ),
 }
 
 
@@ -128,6 +142,7 @@ def apply_path_env(root: Path) -> dict:
         root / "logs" / "runs",
         root / "outputs" / "hydra",
         root / "outputs" / "eval",
+        root / "outputs" / "diag",
         root / "outputs" / "checkpoints",
         root / "data" / "incoming",
         root / "data" / "extracted",
@@ -202,7 +217,7 @@ RE_EPOCH = re.compile(r"Epoch\s*(?:\[?\s*)?(\d+)\s*/\s*(\d+)", re.I)
 RE_STEP = re.compile(r"(?:step|it|batch)\s*[|:]?\s*(\d+)\s*/\s*(\d+)", re.I)
 RE_PCT = re.compile(r"(\d{1,3})%")
 RE_LOSS = re.compile(
-    r"(pred_loss|sigreg_loss|forward_loss|backward_loss|official_loss|train/loss|val/loss|loss)[=:\s]\s*([0-9.eE+-]+)",
+    r"(pred_loss|sigreg_loss|forward_teacher_loss|forward_auto_step_loss|forward_step_loss|forward_roll_loss|forward_loss|forward_action_loss|backward_loss|official_loss|train/loss|val/loss|loss)[=:\s]\s*([0-9.eE+-]+)",
     re.I,
 )
 RE_FAIL = re.compile(
@@ -367,7 +382,7 @@ def parse_progress(line: str, state: ProgressState, stage_id: str) -> None:
             state.total = 100
     losses = RE_LOSS.findall(line)
     if losses:
-        loss_s = " ".join(f"{k}={v}" for k, v in losses)[:80]
+        loss_s = " ".join(f"{k}={v}" for k, v in losses)[:160]
         if state.sub_total > 0:
             state.brief = f"{state.sub_label} {state.sub_current}/{state.sub_total}  {loss_s}"
         else:
@@ -500,6 +515,12 @@ class Pipeline:
             "driver": driver,
             "epochs": self.args.epochs,
             "batch_size": self.args.batch_size,
+            "train_run_name": getattr(self.args, "train_run_name", None),
+            "forward_variant": getattr(self.args, "forward_variant", "latent"),
+            "forward_action_weight": getattr(self.args, "forward_action_weight", 1.0),
+            "forward_teacher_weight": getattr(self.args, "forward_teacher_weight", 1.0),
+            "forward_branches": getattr(self.args, "forward_branches", 4),
+            "forward_history_size": 2,
             "log_dir": str(self.log_dir),
         }
 
@@ -620,8 +641,9 @@ class Pipeline:
                 "from hydra import compose, initialize_config_dir\n"
                 "from omegaconf import OmegaConf\n"
                 f"cfg_dir = {str(self.root / 'config' / 'train')!r}\n"
+                f"overrides = {['data=' + spec.train_data] + self._forward_train_overrides()!r}\n"
                 "with initialize_config_dir(version_base=None, config_dir=cfg_dir):\n"
-                f"    cfg = compose(config_name='fblewm', overrides=['data={spec.train_data}'])\n"
+                "    cfg = compose(config_name='fblewm', overrides=overrides)\n"
                 f"out = Path({str(self.log_dir / 'resolved_train.yaml')!r})\n"
                 "out.write_text(OmegaConf.to_yaml(cfg))\n"
                 "print(out)\n"
@@ -738,7 +760,7 @@ class Pipeline:
                 stage.progress.brief = "data_link ok"
                 return 0
 
-            # ---- Cube / TwoRoom: zst under LeWM/data (no server HF download) ----
+            # ---- Cube / TwoRoom / Reacher: zst under LeWM/data (no server HF download) ----
             search_roots = (local, local / "extracted", extracted, incoming_fallback)
             ready = _find_existing_ready(spec, search_roots)
             if ready is None:
@@ -845,10 +867,41 @@ sys.path.insert(0, str(Path('.').resolve()))
 import torch
 import stable_worldmodel as swm
 import stable_pretraining as spt
-from module import CausalLatentImaginer, ConditionalLatentImaginer, SIGReg
+from module import (
+    CausalLatentImaginer,
+    ConditionalLatentImaginer,
+    ActionAlignedCausalLatentImaginer,
+    SequentialActionCausalLatentImaginer,
+    BranchPreservingCausalLatentImaginer,
+    SIGReg,
+)
 from fblewm import FBLeWM
 from policy import compute_imagine_steps
 assert compute_imagine_steps(75, 0, 25, 5) == 10
+head = ActionAlignedCausalLatentImaginer(dim=8, hidden_dim=16, depth=1, action_dim=10)
+z = torch.randn(2, 3, 8)
+a_hat, z_hat = head.forward_with_action(z)
+assert z_hat.shape == z.shape and a_hat.shape == (2, 3, 10)
+assert torch.allclose(head(z), z_hat)
+seq = SequentialActionCausalLatentImaginer(dim=8, hidden_dim=16, depth=1, action_dim=10)
+a_seq = seq.predict_action(z)
+z_a = seq.transition(z, a_seq)
+z_b = seq.transition(z, a_seq + 1)
+assert a_seq.shape == (2, 3, 10) and z_a.shape == z.shape
+assert not torch.allclose(z_a, z_b)
+assert torch.allclose(seq(z), seq.forward_with_action(z)[1])
+bp = BranchPreservingCausalLatentImaginer(dim=8, hidden_dim=16, depth=1, num_branches=3)
+h = torch.randn(2, 2, 8)
+y = bp.forward_branches(h)
+assert y.shape == (2, 3, 8)
+assert not torch.allclose(y[:, 0], y[:, 1])
+h_asg = h.unsqueeze(1).expand(2, 3, 2, 8).contiguous()
+y_asg = bp.forward_assigned(h_asg)
+assert y_asg.shape == (2, 3, 8)
+p0_m = h[:, 1].unsqueeze(1).expand(2, 3, 8)
+h_roll = torch.stack([p0_m, y], dim=2)
+y_roll = bp.forward_assigned(h_roll)
+assert y_roll.shape == (2, 3, 8)
 print('imports_ok')
 print('cuda', torch.cuda.is_available())
 """
@@ -873,6 +926,38 @@ print('cuda', torch.cuda.is_available())
         stage.progress.brief = "model stack ok"
         return 0
 
+    def _resolved_eval_modes(self) -> str:
+        modes = getattr(self.args, "eval_modes", None)
+        variant = getattr(self.args, "forward_variant", None) or "latent"
+        if modes:
+            return modes
+        if variant == "branch_preserving":
+            return "official,forward"
+        return "official,forward,backward"
+
+    def _forward_train_overrides(self) -> List[str]:
+        """Hydra overrides for the Forward variant. Eval still uses mode=forward."""
+        variant = getattr(self.args, "forward_variant", None) or "latent"
+        action_weight = getattr(self.args, "forward_action_weight", None)
+        if action_weight is None:
+            action_weight = 1.0
+        teacher_weight = getattr(self.args, "forward_teacher_weight", None)
+        if teacher_weight is None:
+            teacher_weight = 1.0
+        overrides = [
+            f"loss.forward.variant={variant}",
+            f"loss.forward.action_weight={action_weight}",
+            f"loss.forward.teacher_weight={teacher_weight}",
+        ]
+        if variant in ("action_aligned", "sequential_action"):
+            overrides.append("loss.backward.weight=0.0")
+        if variant == "branch_preserving":
+            branches = getattr(self.args, "forward_branches", None)
+            if branches is None:
+                branches = 4
+            overrides.append(f"loss.forward.branches={int(branches)}")
+        return overrides
+
     def _cmd_train(self, pipe: "Pipeline") -> List[str]:
         hydra_dir = str(self.root / "outputs" / "hydra" / self.run_id)
         spec = task_spec(self.args.task)
@@ -890,10 +975,19 @@ print('cuda', torch.cuda.is_available())
             f"hydra.run.dir={hydra_dir}",
             "hydra.job.chdir=false",
         ]
-        if b_target == "now":
+        # Tests call Pipeline._cmd_train(fake, None); resolve via the class.
+        cmd.extend(Pipeline._forward_train_overrides(self))
+        if b_target in ("now", "pred_goal", "fixed_bridge"):
             cmd.append(
                 "model.backward_imaginer._target_=module.ConditionalLatentImaginer"
             )
+        if b_target == "now":
+            cmd.append("model.backward_anchor=obs")
+        elif b_target in ("pred_goal", "fixed_bridge"):
+            cmd.append("model.backward_anchor=pred")
+        if b_target == "fixed_bridge":
+            cmd.append("loss.backward.p_noise=0.0")
+            cmd.append("loss.backward.goal_rank_weight=0.0")
         return cmd
 
     def _cmd_eval(self, pipe: "Pipeline") -> List[str]:
@@ -941,9 +1035,11 @@ print('cuda', torch.cuda.is_available())
                         pass
                     break
         hydra_dir = str(self.root / "outputs" / "eval" / self.run_id)
-        if getattr(self.args, "eval_resume_dir", None):
+        if getattr(self.args, "eval_dir", None):
+            hydra_dir = str(self.args.eval_dir)
+        elif getattr(self.args, "eval_resume_dir", None):
             hydra_dir = str(self.args.eval_resume_dir)
-        modes = getattr(self.args, "eval_modes", None) or "official,forward,backward"
+        modes = Pipeline._resolved_eval_modes(self)
         offsets = getattr(self.args, "eval_offsets", None) or "25,50,75,100"
         cmd = [
             sys.executable,
@@ -968,6 +1064,10 @@ print('cuda', torch.cuda.is_available())
                 cmd.append(f"--starts-manifest={starts}")
         if getattr(self.args, "eval_resume_dir", None):
             cmd.append("--resume")
+        if getattr(self.args, "backward_depth_cap", None) is not None:
+            cmd.append(f"--backward-depth-cap={int(self.args.backward_depth_cap)}")
+        if getattr(self.args, "record_cem_cost", False):
+            cmd.append("--record-cem-cost")
         return cmd
 
     @staticmethod
@@ -1278,9 +1378,7 @@ print('cuda', torch.cuda.is_available())
                             stage.progress.brief = f"training {self.args.epochs} epochs"
                         elif stage.stage_id == "eval":
                             stage.progress.unit = "it"
-                            modes = getattr(self.args, "eval_modes", None) or (
-                                "official,forward,backward"
-                            )
+                            modes = Pipeline._resolved_eval_modes(self)
                             offsets = getattr(self.args, "eval_offsets", None) or (
                                 "25,50,75,100"
                             )
@@ -1387,7 +1485,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--task",
         default="pusht",
         choices=sorted(TASK_SPECS.keys()),
-        help="Environment task (default: pusht; cube/tworoom reuse same progress UI)",
+        help="Environment task (default: pusht; cube/tworoom/reacher reuse same progress UI)",
     )
     p.add_argument("--epochs", type=int, default=10, help="Default PushT epochs is 10")
     p.add_argument("--batch-size", type=int, default=128)
@@ -1407,8 +1505,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--eval-modes",
-        default="official,forward,backward",
-        help="Eval modes for matrix script (e.g. fusion, fusion_avg05,meet, or all)",
+        default=None,
+        help=(
+            "Eval modes for matrix script (e.g. fusion, fusion_avg05,meet, or all). "
+            "Default official,forward,backward; branch_preserving defaults to "
+            "official,forward."
+        ),
     )
     p.add_argument(
         "--eval-offsets",
@@ -1425,17 +1527,48 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "Checkpoint dir under STABLEWM_HOME/checkpoints "
-            "(default: fblewm_bp for pusht, fblewm_tworoom_v2 / fblewm_cube for others; "
+            "(default: fblewm_bp for pusht, fblewm_tworoom_v2 / fblewm_cube_v2 for others; "
             "never overwrite protected fblewm / fblewm_bp / fblewm_tworoom / fblewm_cube)"
         ),
     )
     p.add_argument(
+        "--forward-variant",
+        default="latent",
+        choices=["latent", "action_aligned", "sequential_action", "branch_preserving"],
+        help=(
+            "Training Forward head: latent=F(p)->z (legacy); "
+            "action_aligned=F(p)->(A_hat,z_hat); "
+            "sequential_action=A=G(p), z'=H(p,A); "
+            "branch_preserving=F_m([z_{t-1},z_t])->z_{t+1}. "
+            "Eval still uses mode=forward."
+        ),
+    )
+    p.add_argument(
+        "--forward-action-weight",
+        type=float,
+        default=1.0,
+        help="Weight on action MSE inside forward_loss for action-aligned variants",
+    )
+    p.add_argument(
+        "--forward-teacher-weight",
+        type=float,
+        default=1.0,
+        help="Weight on teacher-forced H(p, A_tgt) when --forward-variant=sequential_action",
+    )
+    p.add_argument(
+        "--forward-branches",
+        type=int,
+        default=4,
+        help="Number of Forward heads when --forward-variant=branch_preserving",
+    )
+    p.add_argument(
         "--backward-target",
         default=None,
-        choices=["pred", "encoder", "now"],
+        choices=["pred", "encoder", "now", "pred_goal", "fixed_bridge"],
         help=(
             "B objective: pred=unary B(z)->p, encoder=unary B(z)->z, "
-            "now=B(z_now, z_goal)->z "
+            "now=B(z_now, z_goal)->z, pred_goal=B(P, z_later)->z, "
+            "fixed_bridge=B(P1, z_later) with frozen P1 "
             "(default: pred for pusht, now for tworoom, encoder for cube)"
         ),
     )
@@ -1450,6 +1583,25 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="Receding horizon override (default: same as --eval-horizon)",
+    )
+    p.add_argument(
+        "--eval-dir",
+        default=None,
+        help=(
+            "Write matrix eval here instead of outputs/eval/<run_id>. "
+            "Use outputs/diag/... for diagnostic ablations."
+        ),
+    )
+    p.add_argument(
+        "--backward-depth-cap",
+        type=int,
+        default=None,
+        help="Eval-only pred_goal recursion cap (min(k, cap)); default unset.",
+    )
+    p.add_argument(
+        "--record-cem-cost",
+        action="store_true",
+        help="Record real CEM candidate-cost traces during eval.",
     )
     return p
 
