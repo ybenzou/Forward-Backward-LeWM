@@ -75,16 +75,22 @@ def apply_publication_style(style: FigureStyle | None = None) -> None:
     )
 
 
-def finalize_figure(fig, out_path, formats=None, dpi=300, close=True, pad=0.35):
+def finalize_figure(
+    fig, out_path, formats=None, dpi=300, close=True, pad=0.35, rect=None, tight=True, pad_inches=0.08
+):
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     if formats is None:
         formats = [out_path.suffix.lstrip(".") or "png"]
     saved = []
-    fig.tight_layout(pad=pad)
+    if tight:
+        if rect is None:
+            fig.tight_layout(pad=pad)
+        else:
+            fig.tight_layout(pad=pad, rect=rect)
     for fmt in formats:
         dest = out_path.with_suffix(f".{fmt}")
-        fig.savefig(dest, dpi=dpi, bbox_inches="tight", pad_inches=0.08)
+        fig.savefig(dest, dpi=dpi, bbox_inches="tight", pad_inches=pad_inches)
         saved.append(dest)
         print(f"wrote {dest}")
     if close:
@@ -269,7 +275,7 @@ def plot_success(data, dest: Path, longcem=None) -> None:
     if longcem is not None:
         series.insert(
             1,
-            ("official_h10", PALETTE["teal"], r"Long-CEM ($H{=}50$)", 3, "^", "--"),
+            ("official_h10", PALETTE["teal"], r"LeWM ($H{=}50$)", 3, "^", "--"),
         )
 
     handles = labels = None
@@ -311,7 +317,7 @@ def plot_success(data, dest: Path, longcem=None) -> None:
                     zorder=z - 1,
                 )
 
-        ax.set_title(f"({panel[task]})  {TASK_TITLES[task]}", pad=8)
+        ax.set_title(f"({panel[task]})  {TASK_TITLES[task]}", pad=3)
         ax.set_xlabel(r"Goal offset $o$")
         ax.set_xticks(list(OFFSETS))
         ax.set_xlim(17, 108)
@@ -332,16 +338,18 @@ def plot_success(data, dest: Path, longcem=None) -> None:
         handles, labels = ax.get_legend_handles_labels()
 
     ncol = 3 if longcem is not None else 2
+    fig.subplots_adjust(left=0.055, right=0.995, bottom=0.16, top=0.84, wspace=0.13)
     fig.legend(
         handles,
         labels,
-        loc="upper center",
+        loc="lower center",
         ncol=ncol,
-        bbox_to_anchor=(0.54, 1.03),
+        bbox_to_anchor=(0.52, 0.855),
         handlelength=2.2,
-        columnspacing=1.4,
+        columnspacing=1.6,
+        borderaxespad=0.0,
     )
-    finalize_figure(fig, dest, formats=["png", "pdf", "svg"], dpi=300, pad=1.15)
+    finalize_figure(fig, dest, formats=["png", "pdf", "svg"], dpi=300, tight=False, pad_inches=0.04)
 
 
 def plot_delta(data, dest: Path, longcem=None) -> None:

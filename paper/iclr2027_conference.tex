@@ -15,6 +15,7 @@
 % Figures/tables only; do not edit iclr2027_conference.sty.
 \usepackage{graphicx}
 \usepackage{booktabs}
+\usepackage{float}
 \usepackage[section]{placeins}
 
 
@@ -532,7 +533,7 @@ pusher before the T moves. Reacher is already geometrically easier;
 the HAS strip still finishes closer to the goal pose. These frames
 are examples, not additional quantitative results.
 
-\begin{figure}[ht]
+\begin{figure}[H]
 \centering
 \includegraphics[width=\linewidth]{figures/fig_has_process.pdf}
 \caption{One shared start per task at goal offset $o{=}75$. Columns
@@ -565,7 +566,7 @@ large values, while the aligned distances occupy a lower, broader
 range. The diagnostic is a property of the scoring metric used by
 the planner.
 
-\begin{figure}[ht]
+\begin{figure}[H]
 \centering
 \includegraphics[width=\linewidth]{figures/fig_has_score_contrast.pdf}
 \vspace{-0.4em}
@@ -586,28 +587,6 @@ Setting $o{=}H$ disables $F$ and recovers LeWM. Replacing HAS scoring
 with LeWM scoring at $H{=}50$ tests extra action-conditioned compute
 and does not match HAS at $o\ge 50$.
 
-Equation~\ref{eq:depth} selects how many Forward steps to apply after
-the short rollout. We test that choice on the same ten groups and
-starts as Table~\ref{tab:main}, at $o\in\{75,100\}$. The conditions
-are official LeWM ($k{=}0$), fixed $k\in\{5,10,15\}$, and HAS with
-$k(e,o)$. Only the Forward depth changes. Figure~\ref{fig:kdepth}
-reports the $10$-group means. HAS is highest except on TwoRoom at
-$o{=}100$, where fixed $k{=}5$ exceeds it. Fixed $k{=}15$ is weak on
-every task, and on PushT every fixed $k>0$ falls below $k{=}0$.
-
-\begin{figure}[ht]
-\centering
-\includegraphics[width=\linewidth]{figures/fig_k_depth_multiseed.pdf}
-\vspace{-0.4em}
-\caption{Success versus fixed Forward depth. Rows are goal offsets
-$o{=}75$ and $o{=}100$. $k{=}0$ is official LeWM. Light points are
-the ten evaluation groups; the curve is the group mean $\pm$ one
-standard deviation. The horizontal line is HAS with $k(e,o)$ from
-Equation~\ref{eq:depth}. Same starts as Table~\ref{tab:main}.}
-\label{fig:kdepth}
-\vspace{-0.6em}
-\end{figure}
-
 A single-group PushT check asks whether $F$ needs actions.
 Action-aligned and sequential action-conditioned variants do not
 improve the long-offset pattern
@@ -624,9 +603,7 @@ quantify start and planner variability, not training-seed variability.
 The $H{=}50$ control is one alternative span and is not
 compute-matched to HAS.
 PushT success is still $23.4\%$ at $o{=}100$. HAS assumes that the
-temporal goal offset is available when selecting $k$. The
-remaining-gap rule for $k$ is a correspondence rule: on TwoRoom at
-$o{=}100$, fixed $k{=}5$ exceeds HAS.
+temporal goal offset is available when selecting $k$.
 
 \section{Conclusion}
 \label{sec:concl}
@@ -642,8 +619,7 @@ distance is evaluated.
 On PushT, TwoRoom, and Reacher, that change in comparison time raises
 success whenever the goal lies beyond the default span $H{=}25$. The
 same LeWM planner with $H{=}50$ does not recover the gain, and HAS
-collapses to LeWM when no alignment is applied. A mismatched Forward
-depth on the same groups does not replace $k(e,o)$. The evidence remains
+collapses to LeWM when no alignment is applied. The evidence remains
 specific to one checkpoint per task. HAS also requires the goal offset
 to set its recursion depth, and comparisons against learned terminal
 metrics remain incomplete.
@@ -675,8 +651,8 @@ number of episodes, paired evaluation groups, goal offsets, interaction
 budgets, checkpoints, and aggregation procedure.
 Appendix~\ref{app:implementation} records optimization and architectural
 details, Appendix~\ref{app:protocol} specifies CEM, the
-replanning schedule, the held-out scoring diagnostic, and the
-Forward-depth sweep, and Appendix~\ref{app:ablation}
+replanning schedule, and the held-out scoring diagnostic, and
+Appendix~\ref{app:ablation}
 records the action-conditioned Forward check.
 Configurations, checkpoints, start manifests, and
 the scripts used to aggregate Table~\ref{tab:main} will be included
@@ -770,23 +746,6 @@ environment steps. Every episode listed in the ten evaluation-group
 manifests is excluded. From the remainder we draw $400$ windows per
 task. Encoding uses the same epoch-$10$ checkpoint as
 Table~\ref{tab:main}. The diagnostic never runs CEM.
-
-\paragraph{Forward-depth sweep.}
-Figure~\ref{fig:kdepth} reuses the official LeWM and HAS summaries from
-the main matrix for $k{=}0$ and for $k(e,o)$. Fixed
-$k\in\{5,10,15\}$ rerun the same starts and change only the Forward
-depth. Offsets are $o\in\{75,100\}$. Group means and standard
-deviations are reported in Table~\ref{tab:kdepth}.
-
-\begin{table}[t]
-\caption{Success rate (\%; mean $\pm$ std over $10$ evaluation
-groups) for the Forward-depth sweep in Figure~\ref{fig:kdepth}.}
-\label{tab:kdepth}
-\begin{center}
-\small
-\input{tables/tab_k_depth_multiseed.tex}
-\end{center}
-\end{table}
 
 \section{Action-conditioned Forward check}
 \label{app:ablation}

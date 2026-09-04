@@ -161,7 +161,7 @@ def plot_contrast(task_data: dict[str, dict], dest: Path) -> None:
     )
     names = [n for n in ("pusht", "tworoom", "reacher") if n in task_data]
     nrows, ncols = len(names), len(ALIGNMENTS)
-    fig = plt.figure(figsize=(7.4, 4.35))
+    fig = plt.figure(figsize=(7.4, 4.30))
     gs = fig.add_gridspec(
         nrows,
         ncols,
@@ -231,7 +231,7 @@ def plot_contrast(task_data: dict[str, dict], dest: Path) -> None:
         handles=handles,
         loc="lower center",
         ncol=2,
-        bbox_to_anchor=(0.55, 0.905),
+        bbox_to_anchor=(0.55, 0.938),
         handlelength=1.2,
         columnspacing=1.8,
         borderaxespad=0.0,
