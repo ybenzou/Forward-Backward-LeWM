@@ -15,6 +15,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,7 +36,13 @@ from plot_iclr_multiseed import (  # noqa: E402
 K_ROOT = ROOT / "outputs" / "diag" / "k_ablation" / "multiseed"
 PREV = ROOT / "paper" / "interpretability_preview"
 OFFSETS = (75, 100)
-# Fixed depths first, then HAS. Internal key "dynamic" is the HAS rows.
+K_FIXED = (
+    ("k0", 0),
+    ("k5", 5),
+    ("k10", 10),
+    ("k15", 15),
+)
+# Internal key "dynamic" is HAS. Table still lists fixed k, then HAS.
 CONDS = (
     ("k0", r"$k{=}0$", PALETTE["red_strong"]),
     ("k5", r"$k{=}5$", "#E9A6A1"),
@@ -43,6 +50,11 @@ CONDS = (
     ("k15", r"$k{=}15$", "#767676"),
     ("dynamic", "HAS", PALETTE["blue_main"]),
 )
+OFFSET_STYLE = (
+    (75, PALETTE["red_strong"], "o", "-"),
+    (100, PALETTE["teal"], "s", "--"),
+)
+HAS_X = {75: 17.4, 100: 18.6}
 
 
 def _rate_from_summary(path: Path, mode: str, offset: int) -> float | None:
@@ -108,6 +120,15 @@ def write_table(data: dict, dest: Path) -> None:
     print(f"wrote {dest}")
 
 
+def _mu_sd(xs: list[float]) -> tuple[float, float]:
+    arr = np.array(xs, dtype=float)
+    if len(arr) == 0:
+        return float("nan"), 0.0
+    if len(arr) == 1:
+        return float(arr[0]), 0.0
+    return mean_std(arr)
+
+
 def plot_bars(data: dict, dest: Path) -> None:
     apply_publication_style(
         FigureStyle(
@@ -116,78 +137,106 @@ def plot_bars(data: dict, dest: Path) -> None:
             font_family=("Liberation Sans", "DejaVu Sans", "sans-serif"),
         )
     )
-    fig = plt.figure(figsize=(7.4, 2.55))
-    outer = fig.add_gridspec(
-        2,
-        1,
-        height_ratios=(1.00, 0.22),
-        hspace=0.42,
-        left=0.08,
-        right=0.995,
-        top=0.90,
-        bottom=0.04,
-    )
-    gs = outer[0].subgridspec(1, 3, wspace=0.12)
-    axes = []
-    for i in range(3):
-        ax = fig.add_subplot(gs[0, i], sharey=axes[0] if axes else None)
-        if i:
-            ax.tick_params(labelleft=False)
-        axes.append(ax)
-    x = np.arange(len(OFFSETS))
-    w = 0.15
-    handles = []
+    fig, axes = plt.subplots(1, 3, figsize=(7.6, 2.55), sharey=True)
+    rng = np.random.default_rng(0)
+    ks = np.array([k for _, k in K_FIXED], dtype=float)
+    handles: list = []
     for ax, task in zip(axes, TASKS):
-        for i, (name, lab, col) in enumerate(CONDS):
+        ax.axvline(16.2, color="#CFCECE", lw=0.8, ls=":", zorder=0)
+        for o, color, marker, ls in OFFSET_STYLE:
             mus, sds = [], []
-            for o in OFFSETS:
-                xs = np.array(data[task][name][o], dtype=float)
-                if len(xs) == 0:
-                    mus.append(np.nan)
-                    sds.append(0.0)
-                elif len(xs) == 1:
-                    mus.append(float(xs[0]))
-                    sds.append(0.0)
-                else:
-                    mu, sd = mean_std(xs)
-                    mus.append(mu)
-                    sds.append(sd)
-            xpos = x + (i - 2.0) * w
-            bar = ax.bar(
-                xpos,
+            for name, k in K_FIXED:
+                xs = data[task][name][o]
+                mu, sd = _mu_sd(xs)
+                mus.append(mu)
+                sds.append(sd)
+                if xs:
+                    jitter = rng.uniform(-0.45, 0.45, size=len(xs))
+                    ax.scatter(
+                        np.full(len(xs), k) + jitter,
+                        np.array(xs, dtype=float),
+                        s=11,
+                        color=color,
+                        alpha=0.28,
+                        linewidths=0,
+                        zorder=2,
+                    )
+            mus = np.array(mus)
+            sds = np.array(sds)
+            line = ax.plot(
+                ks,
                 mus,
-                width=w,
-                color=col,
-                label=lab,
-                edgecolor="white",
-                linewidth=0.4,
-                yerr=sds,
-                error_kw={"ecolor": "#4D4D4D", "elinewidth": 0.8, "capsize": 2},
+                color=color,
+                lw=1.6,
+                ls=ls,
+                marker=marker,
+                markersize=5.5,
+                markeredgecolor="white",
+                markeredgewidth=0.6,
+                label=rf"$o{{=}}{o}$",
+                zorder=3,
+            )[0]
+            ax.fill_between(ks, mus - sds, mus + sds, color=color, alpha=0.10, linewidth=0)
+            has_xs = data[task]["dynamic"][o]
+            has_mu, _ = _mu_sd(has_xs)
+            hx = HAS_X[o]
+            ax.scatter(
+                [hx],
+                [has_mu],
+                s=36,
+                color=color,
+                marker="D",
+                edgecolors="white",
+                linewidths=0.6,
+                zorder=4,
             )
+            if has_xs:
+                jitter = rng.uniform(-0.22, 0.22, size=len(has_xs))
+                ax.scatter(
+                    np.full(len(has_xs), hx) + jitter,
+                    np.array(has_xs, dtype=float),
+                    s=11,
+                    color=color,
+                    alpha=0.28,
+                    linewidths=0,
+                    zorder=2,
+                )
             if ax is axes[0]:
-                handles.append(bar)
-        ax.set_xticks(x, [r"$o{=}75$", r"$o{=}100$"])
+                handles.append(line)
         ax.set_title(TASK_TITLES[task], fontsize=10, color="#2B2B2B", pad=4)
-        ax.set_ylim(0, 105)
+        ax.set_xlim(-1.2, 19.4)
+        ax.set_xticks([0, 5, 10, 15, 18.0], ["0", "5", "10", "15", "HAS"])
+        ax.set_ylim(-2, 105)
         ax.set_yticks([0, 25, 50, 75, 100])
         ax.tick_params(length=2.5)
+        if ax is axes[1]:
+            ax.set_xlabel(r"Fixed Forward depth $k$")
     axes[0].set_ylabel("Success rate (%)")
-    leg_ax = fig.add_subplot(outer[1])
-    leg_ax.set_axis_off()
-    leg_ax.legend(
-        handles,
-        [lab for _, lab, _ in CONDS],
-        loc="center",
-        ncol=len(CONDS),
-        handlelength=1.1,
-        columnspacing=1.2,
-        handletextpad=0.4,
-        borderaxespad=0.0,
+    has_handle = Line2D(
+        [0],
+        [0],
+        marker="D",
+        color="none",
+        markerfacecolor="#4D4D4D",
+        markeredgecolor="white",
+        markersize=6,
+        linestyle="None",
     )
+    fig.legend(
+        [*handles, has_handle],
+        [r"$o{=}75$", r"$o{=}100$", "HAS"],
+        loc="upper center",
+        ncol=3,
+        bbox_to_anchor=(0.54, 1.02),
+        handlelength=1.6,
+        columnspacing=1.4,
+        borderaxespad=0.15,
+    )
+    fig.subplots_adjust(left=0.08, right=0.995, bottom=0.18, top=0.82, wspace=0.14)
     dest.parent.mkdir(parents=True, exist_ok=True)
     for ext in ("pdf", "png", "svg"):
         out = dest.with_suffix(f".{ext}")
-        fig.savefig(out, dpi=300, bbox_inches="tight", pad_inches=0.02)
+        fig.savefig(out, dpi=300, bbox_inches="tight", pad_inches=0.03)
         print(f"wrote {out}")
     plt.close(fig)
 
