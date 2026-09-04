@@ -116,7 +116,14 @@ def plot_bars(data: dict, dest: Path) -> None:
             font_family=("Liberation Sans", "DejaVu Sans", "sans-serif"),
         )
     )
-    fig, axes = plt.subplots(1, 3, figsize=(9.8, 3.15), sharey=True)
+    fig = plt.figure(figsize=(7.4, 2.05))
+    gs = fig.add_gridspec(1, 3, left=0.08, right=0.995, top=0.82, bottom=0.16, wspace=0.12)
+    axes = []
+    for i in range(3):
+        ax = fig.add_subplot(gs[0, i], sharey=axes[0] if axes else None)
+        if i:
+            ax.tick_params(labelleft=False)
+        axes.append(ax)
     x = np.arange(len(OFFSETS))
     w = 0.15
     handles = []
@@ -150,26 +157,25 @@ def plot_bars(data: dict, dest: Path) -> None:
             if ax is axes[0]:
                 handles.append(bar)
         ax.set_xticks(x, [r"$o{=}75$", r"$o{=}100$"])
-        ax.set_title(TASK_TITLES[task], fontsize=11, color="#2B2B2B", pad=6)
+        ax.set_title(TASK_TITLES[task], fontsize=10, color="#2B2B2B", pad=3)
         ax.set_ylim(0, 105)
         ax.set_yticks([0, 25, 50, 75, 100])
-        ax.tick_params(length=3)
+        ax.tick_params(length=2.5)
     axes[0].set_ylabel("Success rate (%)")
     fig.legend(
         handles,
         [lab for _, lab, _ in CONDS],
-        loc="upper center",
+        loc="lower center",
         ncol=len(CONDS),
-        bbox_to_anchor=(0.545, 0.995),
-        handlelength=1.15,
-        columnspacing=1.35,
-        borderaxespad=0.15,
+        bbox_to_anchor=(0.54, 0.835),
+        handlelength=1.1,
+        columnspacing=1.15,
+        borderaxespad=0.0,
     )
-    fig.subplots_adjust(left=0.07, right=0.995, bottom=0.14, top=0.80, wspace=0.16)
     dest.parent.mkdir(parents=True, exist_ok=True)
     for ext in ("pdf", "png", "svg"):
         out = dest.with_suffix(f".{ext}")
-        fig.savefig(out, dpi=300, bbox_inches="tight", pad_inches=0.05)
+        fig.savefig(out, dpi=300, bbox_inches="tight", pad_inches=0.01)
         print(f"wrote {out}")
     plt.close(fig)
 

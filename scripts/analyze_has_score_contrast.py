@@ -161,17 +161,16 @@ def plot_contrast(task_data: dict[str, dict], dest: Path) -> None:
     )
     names = [n for n in ("pusht", "tworoom", "reacher") if n in task_data]
     nrows, ncols = len(names), len(ALIGNMENTS)
-    fig = plt.figure(figsize=(9.8, 2.15 * nrows + 0.45))
-    gs_leg = fig.add_gridspec(1, 1, left=0.13, right=0.99, top=0.985, bottom=0.948)
+    fig = plt.figure(figsize=(7.4, 4.35))
     gs = fig.add_gridspec(
         nrows,
         ncols,
-        left=0.13,
-        right=0.99,
-        top=0.928,
-        bottom=0.09,
-        wspace=0.16,
-        hspace=0.30,
+        left=0.10,
+        right=0.995,
+        top=0.90,
+        bottom=0.08,
+        wspace=0.10,
+        hspace=0.16,
     )
     axes = np.empty((nrows, ncols), dtype=object)
     for r in range(nrows):
@@ -208,32 +207,31 @@ def plot_contrast(task_data: dict[str, dict], dest: Path) -> None:
             )
             ax.set_xlim(0.0, xmax)
             if r == 0:
-                ax.set_title(rf"$k{{=}}{k}$,  $o{{=}}{off}$", pad=3)
+                ax.set_title(rf"$k{{=}}{k}$,  $o{{=}}{off}$", pad=2)
             if c == 0:
                 ax.annotate(
                     TASKS[task]["title"],
-                    xy=(-0.30, 0.5),
+                    xy=(-0.24, 0.5),
                     xycoords="axes fraction",
                     rotation=90,
                     va="center",
                     ha="center",
-                    fontsize=10,
+                    fontsize=9,
                     color="#2B2B2B",
                 )
             if r == nrows - 1:
                 ax.set_xlabel("Terminal score")
-            ax.tick_params(length=3)
+            ax.tick_params(length=2.5)
     axes[nrows // 2, 0].set_ylabel("Count")
     handles = [
         Patch(facecolor=PALETTE["red_strong"], alpha=0.55, label=r"LeWM  $\|z_{e+H}-z_g\|$"),
         Patch(facecolor=PALETTE["blue_main"], alpha=0.55, label=r"HAS  $\|F^{k}(z_{e+H})-z_g\|$"),
     ]
-    leg_ax = fig.add_subplot(gs_leg[0, 0])
-    leg_ax.set_axis_off()
-    leg_ax.legend(
+    fig.legend(
         handles=handles,
         loc="lower center",
         ncol=2,
+        bbox_to_anchor=(0.55, 0.905),
         handlelength=1.2,
         columnspacing=1.8,
         borderaxespad=0.0,
@@ -241,7 +239,7 @@ def plot_contrast(task_data: dict[str, dict], dest: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     for ext in ("pdf", "png", "svg"):
         out = dest.with_suffix(f".{ext}")
-        fig.savefig(out, dpi=300, bbox_inches="tight", pad_inches=0.03)
+        fig.savefig(out, dpi=300, bbox_inches="tight", pad_inches=0.01)
         print(f"wrote {out}")
     plt.close(fig)
 
