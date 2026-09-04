@@ -65,14 +65,14 @@ def arrow(ax, p0, p1, color=INK, lw=1.15, ls="-"):
             color=color,
             linestyle=ls,
             connectionstyle="arc3,rad=0.0",
-            shrinkA=0.4,
-            shrinkB=0.4,
+            shrinkA=0.0,
+            shrinkB=0.2,
             zorder=2,
         )
     )
 
 
-def polyarrow(ax, pts, color=INK, lw=1.15, ls="-"):
+def polyline(ax, pts, color=INK, lw=1.15, ls="-"):
     xs, ys = zip(*pts)
     ax.plot(
         xs,
@@ -84,6 +84,10 @@ def polyarrow(ax, pts, color=INK, lw=1.15, ls="-"):
         solid_joinstyle="miter",
         zorder=2,
     )
+
+
+def polyarrow(ax, pts, color=INK, lw=1.15, ls="-"):
+    polyline(ax, pts, color=color, lw=lw, ls=ls)
     arrow(ax, pts[-2], pts[-1], color=color, lw=lw, ls=ls)
 
 
@@ -117,10 +121,12 @@ def main() -> None:
             "pdf.fonttype": 42,
         }
     )
-    fig, ax = plt.subplots(figsize=(11.6, 6.05), dpi=240)
-    ax.set_xlim(0.15, 11.55)
-    ax.set_ylim(0.00, 7.05)
-    x_L = 10.62
+    fig, ax = plt.subplots(figsize=(11.2, 5.05), dpi=240)
+    fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
+    ax.set_position([0, 0, 1, 1])
+    ax.set_xlim(0.40, 11.42)
+    ax.set_ylim(-0.02, 6.48)
+    x_L = 10.58
     ax.axis("off")
     fig.patch.set_facecolor("white")
     ax.set_facecolor("white")
@@ -128,29 +134,29 @@ def main() -> None:
     T = [1.70, 4.40, 7.10, 9.80]
     Px = [(T[i] + T[i + 1]) / 2 for i in range(3)]
 
-    y_x, y_E, y_z = 1.08, 1.74, 2.46
+    y_x, y_E, y_z = 0.76, 1.74, 2.46
     y_rail = 2.86
     y_P, y_p = 3.58, 4.42
-    y_step, y_roll = 5.50, 6.38
+    y_step, y_roll = 5.50, 6.10
     P_w = 0.88
     tap_xs = [Px[i] - P_w / 2 - 0.10 for i in range(3)]
 
-    ax.add_patch(Rectangle((0.45, 0.48), 10.55, 4.36, fc="#F8F1F1", ec="none", zorder=0))
-    ax.add_patch(Rectangle((0.45, 4.96), 10.55, 1.78, fc="#F0F4F9", ec="none", zorder=0))
+    ax.add_patch(Rectangle((0.45, 0.42), 10.55, 4.42, fc="#F8F1F1", ec="none", zorder=0))
+    ax.add_patch(Rectangle((0.45, 4.96), 10.55, 1.40, fc="#F0F4F9", ec="none", zorder=0))
     ax.text(0.58, 2.70, "LeWM", color=PINK, fontsize=8, va="center")
-    ax.text(0.58, 0.5 * (4.96 + 6.74), "Forward", color=BLUE, fontsize=8, va="center")
+    ax.text(0.58, 0.5 * (4.96 + 6.36), "Forward", color=BLUE, fontsize=8, va="center")
 
     ax.annotate(
         "",
-        xy=(10.95, 0.26),
-        xytext=(0.85, 0.26),
+        xy=(10.95, 0.28),
+        xytext=(0.85, 0.28),
         arrowprops=dict(arrowstyle="-|>", color=MUTED, lw=1.0),
     )
-    ax.text(11.08, 0.26, "time", color=MUTED, fontsize=9, va="center", style="italic")
+    ax.text(11.08, 0.28, "time", color=MUTED, fontsize=9, va="center", style="italic")
     for t, x in enumerate(T):
-        ax.plot([x, x], [0.48, 6.72], color=GUIDE, lw=0.7, ls=(0, (1.2, 2.2)), zorder=1)
-        ax.plot([x, x], [0.18, 0.34], color=MUTED, lw=0.9, zorder=1)
-        ax.text(x, 0.06, f"$t={t}$", ha="center", color=MUTED, fontsize=9)
+        ax.plot([x, x], [0.42, 6.34], color=GUIDE, lw=0.7, ls=(0, (1.2, 2.2)), zorder=1)
+        ax.plot([x, x], [0.22, 0.36], color=MUTED, lw=0.9, zorder=1)
+        ax.text(x, 0.10, f"$t={t}$", ha="center", color=MUTED, fontsize=9)
 
     enc = box(ax, 5.75, y_E, 8.70, 0.48, r"$E$", fc=PINK_FILL, ec=PINK, fs=13, weight="bold")
     zs = []
@@ -186,18 +192,21 @@ def main() -> None:
     F_s1 = box(ax, (T[2] + T[3]) / 2, y_step, 0.58, 0.40, r"$F$", fc=BLUE_FILL, ec=BLUE, fs=12, weight="bold")
     hat3s = box(ax, T[3], y_step, 0.78, 0.42, r"$\hat z_3$", fs=10)
 
-    arrow(ax, edge(ps[0], "top"), (T[1], y_step), color=BLUE, lw=1.1)
-    arrow(ax, (T[1], y_step), edge(F_s0, "left"), color=BLUE, lw=1.1)
-    arrow(ax, edge(F_s0, "right"), edge(hat2, "left"), color=BLUE, lw=1.1)
+    polyline(ax, [edge(ps[0], "top"), (T[1], y_roll)], color=BLUE, lw=1.1)
+    polyarrow(ax, [(T[1], y_step), edge(F_s0, "left")], color=BLUE, lw=1.1)
+    polyarrow(ax, [edge(F_s0, "right"), edge(hat2, "left")], color=BLUE, lw=1.1)
     y_sg = y_p + 0.50
     detach_mark(ax, T[1], y_sg)
     ax.text(T[1] - 0.36, y_sg, r"$\bar p_0$", color=BLUE, fontsize=8, ha="right", va="center")
 
     jy = y_step - 0.42
-    arrow(ax, edge(ps[1], "top"), (T[2], jy), color=BLUE, lw=1.1)
-    arrow(ax, (T[2], jy), (F_s1["x"], jy), color=BLUE, lw=1.1)
-    arrow(ax, (F_s1["x"], jy), edge(F_s1, "bottom"), color=BLUE, lw=1.1)
-    arrow(ax, edge(F_s1, "right"), edge(hat3s, "left"), color=BLUE, lw=1.1)
+    polyarrow(
+        ax,
+        [edge(ps[1], "top"), (T[2], jy), (F_s1["x"], jy), edge(F_s1, "bottom")],
+        color=BLUE,
+        lw=1.1,
+    )
+    polyarrow(ax, [edge(F_s1, "right"), edge(hat3s, "left")], color=BLUE, lw=1.1)
     detach_mark(ax, T[2], y_sg)
     ax.text(T[2] - 0.36, y_sg, r"$\bar p_1$", color=BLUE, fontsize=8, ha="right", va="center")
 
@@ -207,10 +216,9 @@ def main() -> None:
     F_r1 = box(ax, (T[2] + T[3]) / 2, y_roll, 0.58, 0.40, r"$F$", fc=BLUE_FILL, ec=BLUE, fs=12, weight="bold")
     hat3r = box(ax, T[3], y_roll, 0.78, 0.42, r"$\hat z_3$", fs=10)
 
-    arrow(ax, (T[1], y_step + 0.21), (T[1], y_roll), color=BLUE, lw=1.1)
-    arrow(ax, (T[1], y_roll), edge(F_r0, "left"), color=BLUE, lw=1.1)
-    arrow(ax, edge(F_r0, "right"), edge(F_r1, "left"), color=BLUE, lw=1.1)
-    arrow(ax, edge(F_r1, "right"), edge(hat3r, "left"), color=BLUE, lw=1.1)
+    polyarrow(ax, [(T[1], y_roll), edge(F_r0, "left")], color=BLUE, lw=1.1)
+    polyline(ax, [edge(F_r0, "right"), edge(F_r1, "left")], color=BLUE, lw=1.1)
+    polyarrow(ax, [edge(F_r1, "right"), edge(hat3r, "left")], color=BLUE, lw=1.1)
 
     loss_to_z(ax, [hat2], zs[2])
     loss_to_z(ax, [hat3s, hat3r], zs[3])
@@ -220,8 +228,8 @@ def main() -> None:
     ax.text(x_L, y_step + 0.08, r"$\mathcal{L}_{\mathrm{step}}$", color=BLUE, fontsize=9, ha="left")
     ax.text(x_L, y_step - 0.16, r"Train $F$", color=BLUE, fontsize=7, ha="left")
 
-    fig.savefig(OUT, dpi=240, bbox_inches="tight", pad_inches=0.07, facecolor="white")
-    fig.savefig(PAPER_PDF, bbox_inches="tight", pad_inches=0.07, facecolor="white")
+    fig.savefig(OUT, dpi=240, bbox_inches="tight", pad_inches=0.02, facecolor="white")
+    fig.savefig(PAPER_PDF, bbox_inches="tight", pad_inches=0.02, facecolor="white")
     plt.close(fig)
     print("wrote", OUT)
     print("wrote", PAPER_PDF)
