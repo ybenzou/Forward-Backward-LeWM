@@ -21,6 +21,11 @@ EXPORTS = {
     HERE / "forward_training.drawio": HERE / "fig_has_training.svg",
     HERE / "forward_eval.drawio": HERE / "fig_has_evaluation.svg",
 }
+# Drop the standalone Official LeWM panel; keep only the HAS drawing.
+VIEWBOX_CROPS = {
+    HERE / "fig_has_evaluation.svg": (0, 481, 1472, 891),
+    HERE / "fig_has_training.svg": (0, 701, 1762, 721),
+}
 
 LABEL_REPLACEMENTS = {
     "Auto-Forward LeWM Training Pipeline": "HAS Training Pipeline",
@@ -110,6 +115,19 @@ def export(drawio_path: Path, svg_path: Path) -> tuple[Path, tuple[int, int]]:
 
     # Copy-as-SVG stores the complete drawing as the largest embedded payload.
     svg = sanitize_for_pdf(max(candidates, key=len))
+    crop = VIEWBOX_CROPS.get(svg_path)
+    if crop is not None:
+        x, y, w, h = crop
+        text = svg.decode("utf-8")
+        text, n = re.subn(
+            r'width="\d+px" height="\d+px" viewBox="[^"]+"',
+            f'width="{w}px" height="{h}px" viewBox="{x} {y} {w} {h}"',
+            text,
+            count=1,
+        )
+        if n != 1:
+            raise RuntimeError(f"failed to crop {svg_path.name}")
+        svg = text.encode("utf-8")
     svg_path.write_bytes(svg)
     print(
         f"{drawio_path.name}: {len(candidates)} SVG candidate(s), "

@@ -112,12 +112,11 @@ and poorly structured latent distances, may remain.
 \centering
 \includegraphics[width=\linewidth]{figures/fig_has_evaluation.pdf}
 \caption{\textbf{Evaluation-time horizon alignment.}
-\textbf{Top:} LeWM evaluates the endpoint of an action-conditioned
-rollout directly against the encoded goal.
-\textbf{Bottom:} HAS applies the action-free Forward imaginer after the
-short rollout and compares the resulting horizon-aligned
-representation with the goal. The lower rows illustrate how alignment
-is recomputed after successive replanning steps.}
+HAS applies the action-free Forward imaginer after the short LeWM
+rollout and compares the resulting horizon-aligned representation with
+the goal. Pink modules are the official LeWM encoder, predictor, and
+CEM. The lower rows illustrate how alignment is recomputed after
+successive replanning steps.}
 \label{fig:overview}
 \end{figure}
 
@@ -319,20 +318,19 @@ The legacy Forward objective is
 \end{equation}
 The Forward objective enters training with unit weight. Detachment
 confines its gradients to $F$, while $E$ and $P$ continue to receive the
-LeWM objective. Figure~\ref{fig:method} contrasts the LeWM prediction
-objective with the detached supervision used to train $F$.
+LeWM objective. Figure~\ref{fig:method} shows the detached supervision
+used to train $F$ on top of that LeWM prediction objective.
 Appendix~\ref{app:implementation} documents an additional
 parameter-disjoint training head present in the reported checkpoints.
 
 \begin{figure}[ht]
 \centering
 \includegraphics[width=\linewidth]{figures/fig_has_training.pdf}
-\caption{\textbf{LeWM and Forward training pipelines.}
-\textbf{Top:} the official LeWM pipeline jointly trains the encoder and
-action-conditioned causal predictor.
-\textbf{Bottom:} the Forward-augmented pipeline adds an action-free
-causal imaginer trained from subsequent latent targets. The detailed
-step and recursive objectives are given in
+\caption{\textbf{Forward training pipeline.}
+HAS keeps the official LeWM encoder and action-conditioned causal
+predictor (pink) and adds an action-free causal imaginer (blue)
+trained from subsequent latent targets. The detailed step and
+recursive objectives are given in
 Equations~\ref{eq:forward-step}--\ref{eq:forward-total}.}
 \label{fig:method}
 \end{figure}
