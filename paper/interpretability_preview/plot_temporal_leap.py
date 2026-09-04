@@ -153,10 +153,16 @@ def main() -> None:
         arrowprops=dict(arrowstyle="-|>", color=MUTED, lw=1.0),
     )
     ax.text(11.08, 0.28, "time", color=MUTED, fontsize=9, va="center", style="italic")
-    for t, x in enumerate(T):
+    for x in T:
         ax.plot([x, x], [0.42, 6.34], color=GUIDE, lw=0.7, ls=(0, (1.2, 2.2)), zorder=1)
-        ax.plot([x, x], [0.22, 0.36], color=MUTED, lw=0.9, zorder=1)
-        ax.text(x, 0.10, f"$t={t}$", ha="center", color=MUTED, fontsize=9)
+    # Four frames are one t=0 window; the undrawn next slot is t=1.
+    ax.plot([T[0], T[3]], [0.34, 0.34], color=MUTED, lw=0.9, zorder=1)
+    ax.plot([T[0], T[0]], [0.22, 0.34], color=MUTED, lw=0.9, zorder=1)
+    ax.plot([T[3], T[3]], [0.22, 0.34], color=MUTED, lw=0.9, zorder=1)
+    ax.text(0.5 * (T[0] + T[3]), 0.08, r"$t=0$", ha="center", color=MUTED, fontsize=9)
+    t1 = T[3] + 0.58
+    ax.plot([t1, t1], [0.22, 0.36], color=MUTED, lw=0.9, zorder=1)
+    ax.text(t1, 0.08, r"$t=1$", ha="center", color=MUTED, fontsize=9)
 
     enc = box(ax, 5.75, y_E, 8.70, 0.48, r"$E$", fc=PINK_FILL, ec=PINK, fs=13, weight="bold")
     zs = []
