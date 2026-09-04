@@ -125,7 +125,7 @@ def main() -> None:
     fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
     ax.set_position([0, 0, 1, 1])
     ax.set_xlim(0.40, 11.42)
-    ax.set_ylim(-0.02, 6.48)
+    ax.set_ylim(0.12, 6.48)
     x_L = 10.58
     ax.axis("off")
     fig.patch.set_facecolor("white")
@@ -141,28 +141,28 @@ def main() -> None:
     P_w = 0.88
     tap_xs = [Px[i] - P_w / 2 - 0.10 for i in range(3)]
 
-    ax.add_patch(Rectangle((0.45, 0.42), 10.55, 4.42, fc="#F8F1F1", ec="none", zorder=0))
+    ax.add_patch(Rectangle((0.45, 0.28), 10.55, 4.56, fc="#F8F1F1", ec="none", zorder=0))
     ax.add_patch(Rectangle((0.45, 4.96), 10.55, 1.40, fc="#F0F4F9", ec="none", zorder=0))
     ax.text(0.58, 2.70, "LeWM", color=PINK, fontsize=8, va="center")
     ax.text(0.58, 0.5 * (4.96 + 6.36), "Forward", color=BLUE, fontsize=8, va="center")
 
     ax.annotate(
         "",
-        xy=(10.95, 0.28),
-        xytext=(0.85, 0.28),
+        xy=(10.95, 0.40),
+        xytext=(0.85, 0.40),
         arrowprops=dict(arrowstyle="-|>", color=MUTED, lw=1.0),
     )
-    ax.text(11.08, 0.28, "time", color=MUTED, fontsize=9, va="center", style="italic")
+    ax.text(11.08, 0.40, "time", color=MUTED, fontsize=9, va="center", style="italic")
     for x in T:
-        ax.plot([x, x], [0.42, 6.34], color=GUIDE, lw=0.7, ls=(0, (1.2, 2.2)), zorder=1)
+        ax.plot([x, x], [0.28, 6.34], color=GUIDE, lw=0.7, ls=(0, (1.2, 2.2)), zorder=1)
     # Four frames are one t=0 window; the undrawn next slot is t=1.
-    ax.plot([T[0], T[3]], [0.34, 0.34], color=MUTED, lw=0.9, zorder=1)
-    ax.plot([T[0], T[0]], [0.22, 0.34], color=MUTED, lw=0.9, zorder=1)
-    ax.plot([T[3], T[3]], [0.22, 0.34], color=MUTED, lw=0.9, zorder=1)
-    ax.text(0.5 * (T[0] + T[3]), 0.08, r"$t=0$", ha="center", color=MUTED, fontsize=9)
+    ax.plot([T[0], T[3]], [0.46, 0.46], color=MUTED, lw=0.9, zorder=1)
+    ax.plot([T[0], T[0]], [0.34, 0.46], color=MUTED, lw=0.9, zorder=1)
+    ax.plot([T[3], T[3]], [0.34, 0.46], color=MUTED, lw=0.9, zorder=1)
+    ax.text(0.5 * (T[0] + T[3]), 0.22, r"$t=0$", ha="center", color=MUTED, fontsize=9)
     t1 = T[3] + 0.58
-    ax.plot([t1, t1], [0.22, 0.36], color=MUTED, lw=0.9, zorder=1)
-    ax.text(t1, 0.08, r"$t=1$", ha="center", color=MUTED, fontsize=9)
+    ax.plot([t1, t1], [0.34, 0.48], color=MUTED, lw=0.9, zorder=1)
+    ax.text(t1, 0.22, r"$t=1$", ha="center", color=MUTED, fontsize=9)
 
     enc = box(ax, 5.75, y_E, 8.70, 0.48, r"$E$", fc=PINK_FILL, ec=PINK, fs=13, weight="bold")
     zs = []

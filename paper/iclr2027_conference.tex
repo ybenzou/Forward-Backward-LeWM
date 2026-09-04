@@ -323,6 +323,10 @@ used to train $F$ on top of that LeWM prediction objective.
 Appendix~\ref{app:implementation} documents an additional
 parameter-disjoint training head present in the reported checkpoints.
 
+\begingroup
+\setlength{\intextsep}{8pt}
+\setlength{\abovecaptionskip}{6pt}
+\setlength{\belowcaptionskip}{0pt}
 \begin{figure}[H]
 \centering
 \includegraphics[width=\linewidth]{figures/fig_has_training.pdf}
@@ -334,6 +338,7 @@ recursive objectives are given in
 Equations~\ref{eq:forward-step}--\ref{eq:forward-total}.}
 \label{fig:method}
 \end{figure}
+\endgroup
 
 \subsection{Dynamic horizon alignment}
 \label{sec:alignment}
@@ -531,6 +536,10 @@ pusher before the T moves. Reacher is already geometrically easier;
 the HAS strip still finishes closer to the goal pose. These frames
 are examples, not additional quantitative results.
 
+\begingroup
+\setlength{\intextsep}{8pt}
+\setlength{\abovecaptionskip}{6pt}
+\setlength{\belowcaptionskip}{0pt}
 \begin{figure}[H]
 \centering
 \includegraphics[width=\linewidth]{figures/fig_has_process.pdf}
@@ -540,6 +549,7 @@ visual goal. LeWM ($H{=}25$) fails on these starts; HAS reaches the
 goal. The strips are qualitative examples, not additional rates.}
 \label{fig:process}
 \end{figure}
+\endgroup
 
 Two consequences follow if the operative change is the comparison
 time. First, HAS must collapse to LeWM whenever $k{=}0$; the $o{=}H$
@@ -564,18 +574,21 @@ large values, while the aligned distances occupy a lower, broader
 range. The diagnostic is a property of the scoring metric used by
 the planner.
 
+\begingroup
+\setlength{\intextsep}{8pt}
+\setlength{\abovecaptionskip}{6pt}
+\setlength{\belowcaptionskip}{0pt}
 \begin{figure}[H]
 \centering
 \includegraphics[width=\linewidth]{figures/fig_has_score_contrast.pdf}
-\vspace{-0.4em}
 \caption{Held-out scoring diagnostic ($n{=}400$ windows per task;
 evaluation-manifest episodes excluded). Each panel compares the
 unmatched terminal distance $\|z_{e+H}-z_g\|$ with the same
 Euclidean distance after $k$ Forward steps,
 $\|F^{k}(z_{e+H})-z_g\|$.}
 \label{fig:score}
-\vspace{-0.6em}
 \end{figure}
+\endgroup
 
 \subsection{Ablations}
 \label{sec:ablation}
