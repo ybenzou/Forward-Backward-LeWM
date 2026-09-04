@@ -15,7 +15,6 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,11 +49,8 @@ CONDS = (
     ("k15", r"$k{=}15$", "#767676"),
     ("dynamic", "HAS", PALETTE["blue_main"]),
 )
-OFFSET_STYLE = (
-    (75, PALETTE["red_strong"], "o", "-"),
-    (100, PALETTE["teal"], "s", "--"),
-)
-HAS_X = {75: 17.4, 100: 18.6}
+FIXED_COLOR = PALETTE["red_strong"]
+HAS_COLOR = PALETTE["blue_main"]
 
 
 def _rate_from_summary(path: Path, mode: str, offset: int) -> float | None:
@@ -137,13 +133,13 @@ def plot_bars(data: dict, dest: Path) -> None:
             font_family=("Liberation Sans", "DejaVu Sans", "sans-serif"),
         )
     )
-    fig, axes = plt.subplots(1, 3, figsize=(7.6, 2.55), sharey=True)
+    fig, axes = plt.subplots(2, 3, figsize=(7.6, 4.15), sharex=True, sharey=True)
     rng = np.random.default_rng(0)
     ks = np.array([k for _, k in K_FIXED], dtype=float)
     handles: list = []
-    for ax, task in zip(axes, TASKS):
-        ax.axvline(16.2, color="#CFCECE", lw=0.8, ls=":", zorder=0)
-        for o, color, marker, ls in OFFSET_STYLE:
+    for r, o in enumerate(OFFSETS):
+        for c, task in enumerate(TASKS):
+            ax = axes[r, c]
             mus, sds = [], []
             for name, k in K_FIXED:
                 xs = data[task][name][o]
@@ -151,88 +147,82 @@ def plot_bars(data: dict, dest: Path) -> None:
                 mus.append(mu)
                 sds.append(sd)
                 if xs:
-                    jitter = rng.uniform(-0.45, 0.45, size=len(xs))
+                    jitter = rng.uniform(-0.40, 0.40, size=len(xs))
                     ax.scatter(
                         np.full(len(xs), k) + jitter,
                         np.array(xs, dtype=float),
-                        s=11,
-                        color=color,
-                        alpha=0.28,
+                        s=10,
+                        color=FIXED_COLOR,
+                        alpha=0.26,
                         linewidths=0,
                         zorder=2,
                     )
             mus = np.array(mus)
             sds = np.array(sds)
-            line = ax.plot(
+            fixed_line = ax.plot(
                 ks,
                 mus,
-                color=color,
-                lw=1.6,
-                ls=ls,
-                marker=marker,
-                markersize=5.5,
+                color=FIXED_COLOR,
+                lw=1.7,
+                marker="o",
+                markersize=5.0,
                 markeredgecolor="white",
-                markeredgewidth=0.6,
-                label=rf"$o{{=}}{o}$",
+                markeredgewidth=0.55,
                 zorder=3,
+                label=r"Fixed $k$",
             )[0]
-            ax.fill_between(ks, mus - sds, mus + sds, color=color, alpha=0.10, linewidth=0)
+            ax.fill_between(ks, mus - sds, mus + sds, color=FIXED_COLOR, alpha=0.10, linewidth=0)
             has_xs = data[task]["dynamic"][o]
-            has_mu, _ = _mu_sd(has_xs)
-            hx = HAS_X[o]
-            ax.scatter(
-                [hx],
-                [has_mu],
-                s=36,
-                color=color,
-                marker="D",
-                edgecolors="white",
-                linewidths=0.6,
+            has_mu, has_sd = _mu_sd(has_xs)
+            has_line = ax.axhline(
+                has_mu,
+                color=HAS_COLOR,
+                lw=1.7,
                 zorder=4,
+                label="HAS",
             )
-            if has_xs:
-                jitter = rng.uniform(-0.22, 0.22, size=len(has_xs))
-                ax.scatter(
-                    np.full(len(has_xs), hx) + jitter,
-                    np.array(has_xs, dtype=float),
-                    s=11,
-                    color=color,
-                    alpha=0.28,
-                    linewidths=0,
-                    zorder=2,
+            if np.isfinite(has_sd) and has_sd > 0:
+                ax.axhspan(
+                    has_mu - has_sd,
+                    has_mu + has_sd,
+                    color=HAS_COLOR,
+                    alpha=0.10,
+                    zorder=1,
                 )
-            if ax is axes[0]:
-                handles.append(line)
-        ax.set_title(TASK_TITLES[task], fontsize=10, color="#2B2B2B", pad=4)
-        ax.set_xlim(-1.2, 19.4)
-        ax.set_xticks([0, 5, 10, 15, 18.0], ["0", "5", "10", "15", "HAS"])
-        ax.set_ylim(-2, 105)
-        ax.set_yticks([0, 25, 50, 75, 100])
-        ax.tick_params(length=2.5)
-        if ax is axes[1]:
-            ax.set_xlabel(r"Fixed Forward depth $k$")
-    axes[0].set_ylabel("Success rate (%)")
-    has_handle = Line2D(
-        [0],
-        [0],
-        marker="D",
-        color="none",
-        markerfacecolor="#4D4D4D",
-        markeredgecolor="white",
-        markersize=6,
-        linestyle="None",
-    )
+            if r == 0 and c == 0:
+                handles.extend([fixed_line, has_line])
+            if r == 0:
+                ax.set_title(TASK_TITLES[task], fontsize=10, color="#2B2B2B", pad=4)
+            if c == 0:
+                ax.set_ylabel("Success rate (%)")
+                ax.annotate(
+                    rf"$o{{=}}{o}$",
+                    xy=(-0.28, 0.5),
+                    xycoords="axes fraction",
+                    rotation=90,
+                    va="center",
+                    ha="center",
+                    fontsize=10,
+                    color="#2B2B2B",
+                )
+            if r == 1 and c == 1:
+                ax.set_xlabel(r"Fixed Forward depth $k$")
+            ax.set_xlim(-0.8, 15.8)
+            ax.set_xticks([0, 5, 10, 15])
+            ax.set_ylim(-2, 105)
+            ax.set_yticks([0, 25, 50, 75, 100])
+            ax.tick_params(length=2.5)
     fig.legend(
-        [*handles, has_handle],
-        [r"$o{=}75$", r"$o{=}100$", "HAS"],
+        handles,
+        [r"Fixed $k$", "HAS"],
         loc="upper center",
-        ncol=3,
+        ncol=2,
         bbox_to_anchor=(0.54, 1.02),
-        handlelength=1.6,
-        columnspacing=1.4,
+        handlelength=1.8,
+        columnspacing=1.6,
         borderaxespad=0.15,
     )
-    fig.subplots_adjust(left=0.08, right=0.995, bottom=0.18, top=0.82, wspace=0.14)
+    fig.subplots_adjust(left=0.13, right=0.995, bottom=0.10, top=0.86, wspace=0.12, hspace=0.20)
     dest.parent.mkdir(parents=True, exist_ok=True)
     for ext in ("pdf", "png", "svg"):
         out = dest.with_suffix(f".{ext}")
