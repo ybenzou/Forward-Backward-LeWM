@@ -15,7 +15,7 @@
 % Figures/tables only; do not edit iclr2027_conference.sty.
 \usepackage{graphicx}
 \usepackage{booktabs}
-\usepackage[section]{placeins}
+\usepackage{placeins}
 
 
 \title{Horizon-Aligned Scoring: A Longer View for\\
@@ -323,7 +323,7 @@ objective with the detached supervision used to train $F$.
 Appendix~\ref{app:implementation} documents an additional
 parameter-disjoint training head present in the reported checkpoints.
 
-\begin{figure}[t]
+\begin{figure}[ht]
 \centering
 \includegraphics[width=\linewidth]{figures/fig_has_training.pdf}
 \caption{\textbf{LeWM and Forward training pipelines.}
@@ -371,9 +371,10 @@ solver returns the final mean action sequence. The controller executes
 its receding-horizon prefix, updates $e$, and repeats the procedure from
 the new observation.
 
-\begin{algorithm}[t]
+\begin{algorithm}[ht]
 \caption{Horizon-Aligned CEM at elapsed time $e$}
 \label{alg:has-cem}
+{\small
 \begin{algorithmic}[1]
 \Require current latent $z_e$; goal latent $z_g$; goal offset $o$
 \Require predictor $P$; Forward imaginer $F$; block size $b$; span $H=hb$
@@ -397,6 +398,7 @@ the new observation.
 \EndFor
 \State \Return $A^\star\gets\mu_J$
 \end{algorithmic}
+}
 \end{algorithm}
 
 The depth is recomputed after every executed plan because the remaining
@@ -519,15 +521,15 @@ for aligning the scoring time.
 \subsection{Analysis}
 \label{sec:analysis}
 
-\begin{figure*}[t]
+\begin{figure}[t]
 \centering
-\includegraphics[width=\textwidth]{figures/fig_has_process.pdf}
+\includegraphics[width=\linewidth]{figures/fig_has_process.pdf}
 \caption{One shared start per task at goal offset $o{=}75$. Columns
 are environment steps spaced by one action block ($b{=}5$), plus the
 visual goal. LeWM ($H{=}25$) fails on these starts; HAS reaches the
 goal. The strips are qualitative examples, not additional rates.}
 \label{fig:process}
-\end{figure*}
+\end{figure}
 
 The aggregate gap is visible in execution.
 Figure~\ref{fig:process} shows one shared start on PushT, TwoRoom, and
