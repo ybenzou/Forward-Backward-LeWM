@@ -15,7 +15,7 @@
 % Figures/tables only; do not edit iclr2027_conference.sty.
 \usepackage{graphicx}
 \usepackage{booktabs}
-\usepackage{placeins}
+\usepackage[section]{placeins}
 
 
 \title{Horizon-Aligned Scoring: A Longer View for\\
@@ -521,16 +521,6 @@ for aligning the scoring time.
 \subsection{Analysis}
 \label{sec:analysis}
 
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figures/fig_has_process.pdf}
-\caption{One shared start per task at goal offset $o{=}75$. Columns
-are environment steps spaced by one action block ($b{=}5$), plus the
-visual goal. LeWM ($H{=}25$) fails on these starts; HAS reaches the
-goal. The strips are qualitative examples, not additional rates.}
-\label{fig:process}
-\end{figure}
-
 The aggregate gap is visible in execution.
 Figure~\ref{fig:process} shows one shared start on PushT, TwoRoom, and
 Reacher at $o{=}75$. LeWM with $H{=}25$ does not reach the goal on
@@ -541,6 +531,16 @@ contact-rich, so the same scoring change can first reposition the
 pusher before the T moves. Reacher is already geometrically easier;
 the HAS strip still finishes closer to the goal pose. These frames
 are examples, not additional quantitative results.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\linewidth]{figures/fig_has_process.pdf}
+\caption{One shared start per task at goal offset $o{=}75$. Columns
+are environment steps spaced by one action block ($b{=}5$), plus the
+visual goal. LeWM ($H{=}25$) fails on these starts; HAS reaches the
+goal. The strips are qualitative examples, not additional rates.}
+\label{fig:process}
+\end{figure}
 
 Two consequences follow if the operative change is the comparison
 time. First, HAS must collapse to LeWM whenever $k{=}0$; the $o{=}H$
@@ -565,7 +565,7 @@ large values, while the aligned distances occupy a lower, broader
 range. The diagnostic is a property of the scoring metric used by
 the planner.
 
-\begin{figure}[t]
+\begin{figure}[ht]
 \centering
 \includegraphics[width=\linewidth]{figures/fig_has_score_contrast.pdf}
 \vspace{-0.4em}
@@ -595,7 +595,7 @@ reports the $10$-group means. HAS is highest except on TwoRoom at
 $o{=}100$, where fixed $k{=}5$ exceeds it. Fixed $k{=}15$ is weak on
 every task, and on PushT every fixed $k>0$ falls below $k{=}0$.
 
-\begin{figure}[t]
+\begin{figure}[ht]
 \centering
 \includegraphics[width=\linewidth]{figures/fig_k_depth_multiseed.pdf}
 \vspace{-0.4em}
