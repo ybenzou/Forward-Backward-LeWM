@@ -116,8 +116,18 @@ def plot_bars(data: dict, dest: Path) -> None:
             font_family=("Liberation Sans", "DejaVu Sans", "sans-serif"),
         )
     )
-    fig = plt.figure(figsize=(7.4, 2.05))
-    gs = fig.add_gridspec(1, 3, left=0.08, right=0.995, top=0.82, bottom=0.16, wspace=0.12)
+    fig = plt.figure(figsize=(7.4, 2.55))
+    outer = fig.add_gridspec(
+        2,
+        1,
+        height_ratios=(1.00, 0.22),
+        hspace=0.42,
+        left=0.08,
+        right=0.995,
+        top=0.90,
+        bottom=0.04,
+    )
+    gs = outer[0].subgridspec(1, 3, wspace=0.12)
     axes = []
     for i in range(3):
         ax = fig.add_subplot(gs[0, i], sharey=axes[0] if axes else None)
@@ -157,25 +167,27 @@ def plot_bars(data: dict, dest: Path) -> None:
             if ax is axes[0]:
                 handles.append(bar)
         ax.set_xticks(x, [r"$o{=}75$", r"$o{=}100$"])
-        ax.set_title(TASK_TITLES[task], fontsize=10, color="#2B2B2B", pad=3)
+        ax.set_title(TASK_TITLES[task], fontsize=10, color="#2B2B2B", pad=4)
         ax.set_ylim(0, 105)
         ax.set_yticks([0, 25, 50, 75, 100])
         ax.tick_params(length=2.5)
     axes[0].set_ylabel("Success rate (%)")
-    fig.legend(
+    leg_ax = fig.add_subplot(outer[1])
+    leg_ax.set_axis_off()
+    leg_ax.legend(
         handles,
         [lab for _, lab, _ in CONDS],
-        loc="lower center",
+        loc="center",
         ncol=len(CONDS),
-        bbox_to_anchor=(0.54, 0.835),
         handlelength=1.1,
-        columnspacing=1.15,
+        columnspacing=1.2,
+        handletextpad=0.4,
         borderaxespad=0.0,
     )
     dest.parent.mkdir(parents=True, exist_ok=True)
     for ext in ("pdf", "png", "svg"):
         out = dest.with_suffix(f".{ext}")
-        fig.savefig(out, dpi=300, bbox_inches="tight", pad_inches=0.01)
+        fig.savefig(out, dpi=300, bbox_inches="tight", pad_inches=0.02)
         print(f"wrote {out}")
     plt.close(fig)
 
