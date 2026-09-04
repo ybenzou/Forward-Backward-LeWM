@@ -150,7 +150,9 @@ Forward imaginer with detached one-step and recursive supervision, then
 uses it to align candidate endpoints with the goal time.
 \item We evaluate HAS over ten paired evaluation groups on three visual
 control tasks. A control that keeps LeWM scoring but doubles the
-planning span to $H{=}50$ does not match HAS beyond the default span.
+planning span to $H{=}50$ does not match HAS beyond the default span,
+and a mismatched Forward depth on the same groups does not replace
+the remaining-gap rule.
 \end{enumerate}
 
 \section{Related work}
@@ -546,6 +548,32 @@ Table~\ref{tab:main} are that control. Together they locate the gain
 in when the Euclidean score is evaluated, not in a longer
 action-conditioned forecast.
 
+That account also concerns the Euclidean cost before any ranking
+occurs. When $o>H$, Equation~\ref{eq:lewm-cost} compares a
+$25$-step latent with a later goal. We measure both sides of the
+comparison on $400$ held-out dataset windows per task, after
+excluding every episode used by the ten evaluation groups. The
+remaining gaps after $H{=}25$ are
+$(k,o)\in\{(5,50),(10,75),(15,100)\}$. For each window,
+$z_{e+H}$ and $z_g$ are encoder latents at the $H$-step mark and at
+the later goal time. We compute $\|z_{e+H}-z_g\|$ and
+$\|F^{k}(z_{e+H})-z_g\|$; CEM is not run.
+Figure~\ref{fig:score} shows the unmatched distances concentrating at
+large values, while the aligned distances occupy a lower, broader
+range. The diagnostic is a property of the scoring metric used by
+the planner.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/fig_has_score_contrast.pdf}
+\caption{Held-out scoring diagnostic ($n{=}400$ windows per task;
+evaluation-manifest episodes excluded). Each panel compares the
+unmatched terminal distance $\|z_{e+H}-z_g\|$ with the same
+Euclidean distance after $k$ Forward steps,
+$\|F^{k}(z_{e+H})-z_g\|$.}
+\label{fig:score}
+\end{figure*}
+
 \subsection{Ablations}
 \label{sec:ablation}
 
@@ -553,6 +581,25 @@ The protocol already isolates those two design questions.
 Setting $o{=}H$ disables $F$ and recovers LeWM. Replacing HAS scoring
 with LeWM scoring at $H{=}50$ tests extra action-conditioned compute
 and does not match HAS at $o\ge 50$.
+
+Equation~\ref{eq:depth} selects how many Forward steps to apply after
+the short rollout. We test that choice on the same ten groups and
+starts as Table~\ref{tab:main}, at $o\in\{75,100\}$. The conditions
+are official LeWM ($k{=}0$), fixed $k\in\{5,10,15\}$, and HAS with
+$k(e,o)$. Only the Forward depth changes. Figure~\ref{fig:kdepth}
+reports the $10$-group means. HAS is highest except on TwoRoom at
+$o{=}100$, where fixed $k{=}5$ exceeds it. Fixed $k{=}15$ is weak on
+every task, and on PushT every fixed $k>0$ falls below $k{=}0$.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/fig_k_depth_multiseed.pdf}
+\caption{Forward-depth sweep at $o\in\{75,100\}$. $k{=}0$ is official
+LeWM; HAS uses $k(e,o)$ from Equation~\ref{eq:depth}. Bars are the
+$10$-group mean and whiskers the standard deviation, using the same
+starts as Table~\ref{tab:main}.}
+\label{fig:kdepth}
+\end{figure*}
 
 A single-group PushT check asks whether $F$ needs actions.
 Action-aligned and sequential action-conditioned variants do not
@@ -570,7 +617,9 @@ quantify start and planner variability, not training-seed variability.
 The $H{=}50$ control is one alternative span and is not
 compute-matched to HAS.
 PushT success is still $23.4\%$ at $o{=}100$. HAS assumes that the
-temporal goal offset is available when selecting $k$.
+temporal goal offset is available when selecting $k$. The
+remaining-gap rule for $k$ is a correspondence rule: on TwoRoom at
+$o{=}100$, fixed $k{=}5$ exceeds HAS.
 
 \section{Conclusion}
 \label{sec:concl}
@@ -586,7 +635,8 @@ distance is evaluated.
 On PushT, TwoRoom, and Reacher, that change in comparison time raises
 success whenever the goal lies beyond the default span $H{=}25$. The
 same LeWM planner with $H{=}50$ does not recover the gain, and HAS
-collapses to LeWM when no alignment is applied. The evidence remains
+collapses to LeWM when no alignment is applied. A mismatched Forward
+depth on the same groups does not replace $k(e,o)$. The evidence remains
 specific to one checkpoint per task. HAS also requires the goal offset
 to set its recursion depth, and comparisons against learned terminal
 metrics remain incomplete.
@@ -617,8 +667,9 @@ recursion depth, and planning cost. Section~\ref{sec:exp} reports the
 number of episodes, paired evaluation groups, goal offsets, interaction
 budgets, checkpoints, and aggregation procedure.
 Appendix~\ref{app:implementation} records optimization and architectural
-details, Appendix~\ref{app:protocol} specifies CEM and the
-replanning schedule, and Appendix~\ref{app:ablation}
+details, Appendix~\ref{app:protocol} specifies CEM, the
+replanning schedule, the held-out scoring diagnostic, and the
+Forward-depth sweep, and Appendix~\ref{app:ablation}
 records the action-conditioned Forward check.
 Configurations, checkpoints, start manifests, and
 the scripts used to aggregate Table~\ref{tab:main} will be included
@@ -705,6 +756,30 @@ all three planner configurations use the same starts. We first compute
 one success rate per group and configuration, then report the mean and
 standard deviation of these ten rates in Table~\ref{tab:main}. Paired
 gaps use a group-level bootstrap with $10{,}000$ resamples.
+
+\paragraph{Held-out scoring diagnostic.}
+Figure~\ref{fig:score} uses offline windows of length at least $100$
+environment steps. Every episode listed in the ten evaluation-group
+manifests is excluded. From the remainder we draw $400$ windows per
+task. Encoding uses the same epoch-$10$ checkpoint as
+Table~\ref{tab:main}. The diagnostic never runs CEM.
+
+\paragraph{Forward-depth sweep.}
+Figure~\ref{fig:kdepth} reuses the official LeWM and HAS summaries from
+the main matrix for $k{=}0$ and for $k(e,o)$. Fixed
+$k\in\{5,10,15\}$ rerun the same starts and change only the Forward
+depth. Offsets are $o\in\{75,100\}$. Group means and standard
+deviations are reported in Table~\ref{tab:kdepth}.
+
+\begin{table}[t]
+\caption{Success rate (\%; mean $\pm$ std over $10$ evaluation
+groups) for the Forward-depth sweep in Figure~\ref{fig:kdepth}.}
+\label{tab:kdepth}
+\begin{center}
+\small
+\input{tables/tab_k_depth_multiseed.tex}
+\end{center}
+\end{table}
 
 \section{Action-conditioned Forward check}
 \label{app:ablation}
