@@ -668,6 +668,8 @@ def run(cfg):
     transform = spt.data.transforms.Compose(*transforms)
     dataset.transform = transform
 
+    pl.seed_everything(int(cfg.seed), workers=True)
+    print(f"[FBLeWM] seed={int(cfg.seed)}", flush=True)
     rnd_gen = torch.Generator().manual_seed(cfg.seed)
     train_set, val_set = spt.data.random_split(
         dataset, lengths=[cfg.train_split, 1 - cfg.train_split], generator=rnd_gen

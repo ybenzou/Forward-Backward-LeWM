@@ -514,6 +514,7 @@ class Pipeline:
             "gpu": gpu,
             "driver": driver,
             "epochs": self.args.epochs,
+            "seed": getattr(self.args, "seed", 3072),
             "batch_size": self.args.batch_size,
             "train_run_name": getattr(self.args, "train_run_name", None),
             "forward_variant": getattr(self.args, "forward_variant", "latent"),
@@ -974,6 +975,7 @@ print('cuda', torch.cuda.is_available())
             "wandb.enabled=false",
             f"hydra.run.dir={hydra_dir}",
             "hydra.job.chdir=false",
+            f"seed={int(getattr(self.args, 'seed', 3072))}",
         ]
         # Tests call Pipeline._cmd_train(fake, None); resolve via the class.
         cmd.extend(Pipeline._forward_train_overrides(self))
@@ -1488,6 +1490,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Environment task (default: pusht; cube/tworoom/reacher reuse same progress UI)",
     )
     p.add_argument("--epochs", type=int, default=10, help="Default PushT epochs is 10")
+    p.add_argument(
+        "--seed",
+        type=int,
+        default=3072,
+        help="Hydra train seed (split, shuffle, and init). Default: 3072",
+    )
     p.add_argument("--batch-size", type=int, default=128)
     p.add_argument("--skip-eval", action="store_true")
     p.add_argument("--skip-deps", action="store_true")

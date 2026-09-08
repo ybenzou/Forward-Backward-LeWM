@@ -11,6 +11,8 @@ Independent Forward / Backward Causal Latent Imaginer extension of official LeWM
 
 Original LeWM at `/home/yuanben/WorldModel/LeWM` is not modified by this project. Data is reused via symlink / `LOCAL_DATASET_DIR`.
 
+Paper compile / method / code / data paths: [PAPER.md](PAPER.md).
+
 ## Layout
 
 | Path | Role |
