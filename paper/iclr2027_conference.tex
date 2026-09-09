@@ -14,6 +14,9 @@
 % Figures/tables only; do not edit iclr2027_conference.sty.
 \usepackage{graphicx}
 \usepackage{booktabs}
+% Keep floats after their first introduction and within the argument they support.
+\usepackage{flafter}
+\usepackage{placeins}
 \usepackage{hyperref}
 
 
@@ -105,18 +108,7 @@ the extension depth, which decreases as execution advances.
 This design gives the current action sequence a longer scoring
 view while retaining short action-conditioned search.
 
-We evaluate this scoring design across ten paired evaluation groups
-on PushT, TwoRoom, and Reacher. HAS improves mean success at every
-tested offset beyond the default span, including a gain from
-$16.4\%$ to $70.4\%$ in TwoRoom at offset $100$.
-It also exceeds the evaluated longer-span LeWM configuration,
-and the fixed-depth comparison identifies the value of adapting
-the extension during execution. Together, these results establish
-a temporal perspective on endpoint scoring, instantiate it with a
-locally trained Forward map, and demonstrate its practical value
-for longer-horizon control.
-
-\begin{figure}[t]
+\begin{figure}[!htbp]
 \centering
 \includegraphics[width=\linewidth]{figures/fig_has_evaluation.pdf}
 \caption{\textbf{A longer scoring view for a short action plan.}
@@ -127,6 +119,18 @@ representation against the goal embedding. The diagram depicts
 $o>e+H$; at later replans the extension decreases to zero.}
 \label{fig:overview}
 \end{figure}
+\FloatBarrier
+
+We evaluate this scoring design across ten paired evaluation groups
+on PushT, TwoRoom, and Reacher. HAS improves mean success at every
+tested offset beyond the default span, including a gain from
+$16.4\%$ to $70.4\%$ in TwoRoom at offset $100$.
+It also exceeds the evaluated longer-span LeWM configuration,
+and the fixed-depth comparison identifies the value of adapting
+the extension during execution. Together, these results establish
+a temporal perspective on endpoint scoring, instantiate it with a
+locally trained Forward map, and demonstrate its practical value
+for longer-horizon control.
 
 \section{Related Work}
 \label{sec:related}
@@ -266,6 +270,22 @@ the world model (Figure~\ref{fig:method}). Each training sample contains four en
 observations $z_{0:3}=E(x_{0:3})$ separated by one action block;
 here the subscripts index blocks within the sample. LeWM
 produces $p_{0:2}$, with $p_i$ predicting $z_{i+1}$.
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\linewidth]{figures/fig_has_training.pdf}
+\caption{Local and recursive supervision for Forward.
+LeWM predicts $p_i\approx z_{i+1}$ from the four-observation
+training window. Detached predictor outputs supervise the
+shared Forward map through $F(p_0)\rightarrow z_2$,
+$F(p_1)\rightarrow z_3$, and $F(F(p_0))\rightarrow z_3$.
+The schematic $P_i$ instances share the action-conditioned
+predictor parameters; each observation interval is one
+five-step action block.}
+\label{fig:method}
+\end{figure}
+\FloatBarrier
+
 Define the mean squared latent error as
 $D(z,z')=\|z-z'\|_2^2/d$. The world-model objective is
 \begin{equation}
@@ -311,20 +331,6 @@ and optimization details in Appendix~\ref{app:implementation}.
 Local training produces a shared map that can be repeatedly
 applied at the depth selected by Equation~\ref{eq:depth}.
 
-\begin{figure}[tbp]
-\centering
-\includegraphics[width=\linewidth]{figures/fig_has_training.pdf}
-\caption{Local and recursive supervision for Forward.
-LeWM predicts $p_i\approx z_{i+1}$ from the four-observation
-training window. Detached predictor outputs supervise the
-shared Forward map through $F(p_0)\rightarrow z_2$,
-$F(p_1)\rightarrow z_3$, and $F(F(p_0))\rightarrow z_3$.
-The schematic $P_i$ instances share the action-conditioned
-predictor parameters; each observation interval is one
-five-step action block.}
-\label{fig:method}
-\end{figure}
-
 \subsection{Receding-horizon integration}
 \label{sec:planning}
 
@@ -338,7 +344,7 @@ the controller executes the receding-horizon prefix of the
 mean sequence, advances $e$, and replans from the new
 observation. Algorithm~\ref{alg:has-cem} summarizes one call.
 
-\begin{algorithm}[tbp]
+\begin{algorithm}[!htbp]
 \caption{Horizon-Aligned CEM at elapsed time $e$}
 \label{alg:has-cem}
 {\small
@@ -363,6 +369,7 @@ observation. Algorithm~\ref{alg:has-cem} summarizes one call.
 \end{algorithmic}
 }
 \end{algorithm}
+\FloatBarrier
 
 For each candidate, HAS adds $k$ evaluations of the residual
 MLP to the $h$-block action-conditioned rollout.
@@ -417,7 +424,7 @@ These gains establish that a temporal extension of candidate
 endpoints can make the same short action-conditioned planner
 more effective at reaching distant visual goals.
 
-\begin{figure}[t]
+\begin{figure}[!htbp]
 \centering
 \includegraphics[width=0.98\linewidth]{figures/fig_iclr_multiseed.pdf}
 \caption{Goal reaching across temporal offsets. Points are
@@ -427,8 +434,9 @@ ten groups using one checkpoint per task. The dashed line
 marks the default planning span $H=25$, where HAS uses $k=0$.}
 \label{fig:multiseed}
 \end{figure}
+\FloatBarrier
 
-\begin{table}[t]
+\begin{table}[!htbp]
 \caption{Success rate (\%; mean $\pm$ std over $10$ evaluation
 groups). Bold marks the highest mean for each task and offset.
 $^\dagger$LeWM with $H{=}50$, so the $o{=}25$ column is a
@@ -467,6 +475,7 @@ Reacher & LeWM ($H{=}25$)
 \end{tabular}
 \end{center}
 \end{table}
+\FloatBarrier
 
 The cross-task pattern indicates that the value of extended
 scoring depends on the control setting. Navigation in TwoRoom
@@ -503,7 +512,7 @@ the dynamic rule has reached zero. This comparison tests
 the full depth schedule: the initial extension and its
 reduction as the controller approaches the goal horizon.
 
-\begin{table}[t]
+\begin{table}[!htbp]
 \centering
 \caption{Success rate (\%; mean $\pm$ std over ten evaluation
 groups) under different Forward depths. HAS uses the
@@ -515,6 +524,7 @@ are shared within each task and evaluation group.}
 \input{tables/tab_k_depth_multiseed.tex}
 }
 \end{table}
+\FloatBarrier
 
 Dynamic alignment achieves the highest mean in five of the
 six task--offset conditions, making it a strong default
@@ -526,17 +536,13 @@ adapting its depth during execution is an important part of
 the scoring design. The fixed-depth results also make clear
 that applying more Forward steps need not improve control.
 
-The strongest fixed setting exceeds HAS in one condition:
-TwoRoom at $o=100$ achieves $76.2\%$ with $k=5$, compared
-with $70.4\%$ under the dynamic rule. This exception
-suggests that the most useful extension also depends on
-task evolution and the behavior of recursive predictions.
-The remaining-gap rule offers broad performance across
-conditions, while the preferred depth can be task-dependent.
-At the short-offset boundary, the $k=0$ cost identity in
-Section~\ref{sec:alignment} corresponds to matching success
-in TwoRoom and Reacher and near-matching success in PushT
-($87.2\%$ for LeWM and $87.0\%$ for HAS at $o=25$).
+The exception is TwoRoom at $o=100$: fixed $k=5$ achieves
+$76.2\%$, compared with $70.4\%$ for HAS. The preferred depth
+can thus be task-dependent, with the remaining-gap rule providing
+a strong cross-condition default. At $o=25$, the $k=0$ cost
+identity (Section~\ref{sec:alignment}) corresponds to matching
+success in TwoRoom and Reacher and near-matching success in
+PushT ($87.2\%$ for LeWM and $87.0\%$ for HAS).
 
 % HAS_TRAIN_SEEDS_PENDING:
 % The author confirms 3 training seeds x 3 tasks, with BOTH official
@@ -555,28 +561,22 @@ in TwoRoom and Reacher and near-matching success in PushT
 \label{sec:score-analysis}
 
 Temporal extension makes intermediate states more comparable to
-later goals in the learned latent space. To examine this operation,
-we compare the distance from an observed endpoint $z_H$ to its
-later goal $z_g$ with the distance after applying Forward:
-$\|z_H-z_g\|_2$ versus $\|F^k(z_H)-z_g\|_2$.
-The diagnostic uses $400$ evaluation-disjoint trajectory windows
-per task, with $H=25$ and $(k,o)\in\{(5,50),(10,75),(15,100)\}$.
-Using encoder endpoints exposes the transformation performed by
-Forward directly; Appendix~\ref{app:analysis} gives the sampling
-protocol.
+later goals. We examine this transformation directly on encoder
+endpoints, comparing $\|z_H-z_g\|_2$ with
+$\|F^k(z_H)-z_g\|_2$ over $400$ evaluation-disjoint windows per
+task. We use $H=25$ and $(k,o)\in\{(5,50),(10,75),(15,100)\}$;
+Appendix~\ref{app:analysis} gives the sampling protocol.
 
-\begin{figure}[tbp]
+\begin{figure}[!htbp]
 \centering
-\includegraphics[width=\linewidth]{figures/fig_has_score_contrast.pdf}
-\caption{Endpoint-to-goal distances on $400$ evaluation-disjoint
-trajectory windows per task. Direct distances use encoder
-latents at $H=25$ and the goal offset $o$; extended distances
-apply $k=(o-H)/b$ Forward steps to the encoder endpoint.
-The horizontal axis gives Euclidean distance (the square
-root of the planning cost), and the vertical axis counts
-windows.}
+\includegraphics[width=0.95\linewidth]{figures/fig_has_score_contrast.pdf}
+\caption{Temporal extension of observed endpoint distances:
+$\|z_H-z_g\|_2$ versus $\|F^k(z_H)-z_g\|_2$ on $400$
+evaluation-disjoint windows per task ($H=25$).
+Axes show Euclidean distance and window count.}
 \label{fig:score}
 \end{figure}
+\FloatBarrier
 
 The extended representations generally occupy a lower
 endpoint-to-goal distance range (Figure~\ref{fig:score}).
@@ -585,13 +585,12 @@ of the representational gap between an intermediate state and
 a later goal. In PushT, the direct and extended distributions
 overlap more at the longest offset, consistent with the greater
 difficulty of recursive extension in this setting.
-The diagnostic makes the representational effect of HAS visible,
-while the closed-loop comparisons establish its control benefit.
-Its scope is the transformation of observed endpoint distances;
-candidate-ranking accuracy is a separate property.
-The paired executions below connect this scoring perspective
-to intermediate progress during control.
+The diagnostic exposes the transformation of observed endpoint
+distances, while closed-loop comparisons establish the control
+benefit. Paired executions connect this scoring perspective to
+intermediate progress during control.
 
+\FloatBarrier
 \subsection{Planning behavior}
 \label{sec:analysis}
 
@@ -607,7 +606,7 @@ the target configuration. These trajectories connect the
 scoring perspective to control behavior: candidate endpoints
 can be valuable because of the progress that follows them.
 
-\begin{figure}[tbp]
+\begin{figure}[!htbp]
 \centering
 \includegraphics[width=\linewidth]{figures/fig_has_process.pdf}
 \caption{Paired executions from one shared start per task at
@@ -618,6 +617,7 @@ selected starts, while LeWM fails under the environment
 success criterion.}
 \label{fig:process}
 \end{figure}
+\FloatBarrier
 
 \subsection{Limitations}
 \label{sec:limits}
