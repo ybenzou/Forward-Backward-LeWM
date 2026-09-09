@@ -72,42 +72,49 @@ dimension for short-horizon world-model planning.
 \section{Introduction}
 \label{sec:intro}
 
-Visual world models provide a reusable interface for goal-conditioned
-control: they encode observations, predict the effects of candidate
-actions, and evaluate those predictions against a goal image.
-Learning this interface from reward-free trajectories allows the same
-model to support goals specified after
+Visual world models support goal-conditioned control by encoding
+observations, predicting candidate actions, and evaluating the resulting
+latent outcomes against a goal image. Learning from reward-free
+trajectories lets the same model support goals specified after
 training~\citep{sobal2025rewardfree,zhou2025dinowm,lewm2026}.
-The resulting controller depends on two complementary components:
-a model of local dynamics and a scoring rule that identifies which
-predicted outcomes constitute useful progress. A short, accurate
-forecast becomes useful for a distant goal through the quality of
-that second component.
+This interface depends on both local predictive dynamics and a scoring
+rule that recognizes useful progress. For distant goals, short-term
+actions often establish an intermediate state whose value emerges
+through subsequent execution. The scoring rule must connect this
+local prediction with the longer-term objective.
 
-This distinction matters when the goal lies beyond the planning span.
 LeWorldModel (LeWM)~\citep{lewm2026}, an end-to-end Joint-Embedding
-Predictive Architecture (JEPA)~\citep{lecun2022jepa}, ranks action
-sequences by the distance between their predicted endpoints and the
-goal embedding. Under its default $25$-step planning span, the
-endpoint can represent an intermediate stage of a much longer task.
-For example, movement toward a passage can be useful for reaching
-another room even while the current plan ends far from the goal.
-Direct terminal distance asks a representation of this intermediate
-stage to stand in for its later consequences. We frame this
-\emph{temporal mismatch} as a limitation of terminal scoring and
-seek a longer-term view of each candidate's endpoint.
+Predictive Architecture (JEPA)~\citep{lecun2022jepa}, ranks candidate
+sequences by endpoint-to-goal latent distance. With its default
+$25$-step planning span, an endpoint may represent only an intermediate
+stage of a longer task. Movement toward a passage, for example, can
+enable reaching another room while ending far from the goal.
+Direct terminal distance then asks the intermediate representation
+to stand in for its later consequences. We frame this temporal
+mismatch as a limitation of terminal scoring and seek a longer-term
+view of each candidate's endpoint.
 
 Horizon-Aligned Scoring (HAS) supplies this view through a learned
-temporal extension (Figure~\ref{fig:overview}).
-The action-conditioned predictor first rolls out the candidate
-sequence over the short planning span. An action-free Forward
-imaginer then recursively advances its endpoint, and the resulting
-representation is compared with the goal. Forward learns local
-latent transitions from the same observation sequences used to train
-the world model, with supervision on both one-step predictions and
-their two-step composition. At evaluation, its recursion depth
-reflects the remaining time between the short rollout and the goal,
-so the extension contracts as the controller makes progress.
+temporal extension (Figure~\ref{fig:overview}). The action-conditioned
+predictor first produces the short-rollout endpoint. An action-free
+Forward imaginer recursively advances that endpoint before its
+distance to the goal is evaluated. Forward learns from local latent
+transitions, with one-step and recursive supervision supporting its
+repeated use. During planning, the remaining temporal gap determines
+the extension depth, which decreases as execution advances.
+This design gives the current action sequence a longer scoring
+view while retaining short action-conditioned search.
+
+We evaluate this scoring design across ten paired evaluation groups
+on PushT, TwoRoom, and Reacher. HAS improves mean success at every
+tested offset beyond the default span, including a gain from
+$16.4\%$ to $70.4\%$ in TwoRoom at offset $100$.
+It also exceeds the evaluated longer-span LeWM configuration,
+and the fixed-depth comparison identifies the value of adapting
+the extension during execution. Together, these results establish
+a temporal perspective on endpoint scoring, instantiate it with a
+locally trained Forward map, and demonstrate its practical value
+for longer-horizon control.
 
 \begin{figure}[t]
 \centering
@@ -121,89 +128,53 @@ $o>e+H$; at later replans the extension decreases to zero.}
 \label{fig:overview}
 \end{figure}
 
-We test whether this extension improves long-offset goal reaching
-and whether its depth should follow the remaining temporal gap.
-Across ten paired evaluation groups on PushT, TwoRoom, and Reacher,
-HAS improves mean success in every evaluated condition beyond the
-default span. The gains include $42.8\%$ to $67.8\%$ on PushT at
-offset $50$ and $16.4\%$ to $70.4\%$ on TwoRoom at offset $100$.
-A LeWM configuration with a doubled planning span remains below HAS
-in these long-offset comparisons. Applying the same Forward map at
-fixed depths further shows that its usefulness depends on how the
-extension evolves during execution.
-
-Our contribution is a temporal perspective on the scoring interface
-between short-horizon prediction and longer-horizon control.
-HAS instantiates this perspective with a locally trained Forward map
-and a remaining-gap recursion rule integrated into receding-horizon
-planning. The experiments establish the practical value of this
-scoring design and identify depth selection as a consequential part
-of its use. This perspective connects work on extending latent
-dynamics with work on making latent representations useful for
-planning.
-
 \section{Related Work}
 \label{sec:related}
 
-Latent world models make visual control tractable by representing
-future evolution in a compact state space. PlaNet performs online
-planning through learned latent dynamics~\citep{hafner2019planet};
-Dreamer learns behavior through latent
-imagination~\citep{hafner2020dreamer}; and TD-MPC combines short model
-rollouts with a learned terminal value~\citep{hansen2022tdmpc}.
-Reward-free visual goal reaching places a different demand on this
-interface: the controller must evaluate progress toward a newly
-specified observation. PLDM studies this setting through latent
-dynamics learned from offline trajectories~\citep{sobal2025rewardfree}.
-DINO-WM predicts pretrained visual
-features~\citep{zhou2025dinowm}, while LeWM jointly learns the encoder
-and predictor with predictive and distributional
-objectives~\citep{lewm2026}. Together these approaches establish
-latent prediction as a basis for goal-conditioned control and
-motivate the question of how far into the future its scoring rule
-should look.
+Latent world models provide compact predictive interfaces for visual
+control~\citep{hafner2019planet,hafner2020dreamer,hansen2022tdmpc}.
+Reward-free goal reaching uses these interfaces to evaluate progress
+toward observations specified after training. PLDM learns latent
+dynamics from offline trajectories~\citep{sobal2025rewardfree};
+DINO-WM predicts pretrained visual features~\citep{zhou2025dinowm};
+and LeWM jointly trains the encoder and
+predictor~\citep{lewm2026}. Their use of latent prediction motivates
+the question of how its temporal coverage relates to the goals
+against which candidate actions are evaluated.
 
-Extending temporal coverage can improve the futures available to
-a planner. Variable-length latent world models predict outcomes
-conditioned on action sequences of different
-durations~\citep{du2026vlwm}. Hierarchical world models share a latent
-space across temporal resolutions and use coarse predictions to
-guide local planning~\citep{zhang2026hwm}. This decomposition also
-supports learned subgoal interfaces: FF-JEPA uses an action-free
-latent planner to propose successive
-subgoals~\citep{masip2026ffjepa}, and SAGE uses predicted subgoals to
-condition candidate action generation~\citep{cheng2026sage}.
-These methods organize longer-term prediction or guide the search
-toward useful local plans. Once a candidate has been generated, a
-complementary opportunity is to evaluate its endpoint over the
-time scale of the remaining task.
+Longer-term coverage can be built into prediction and search.
+Variable-length world models condition predictions on action
+sequences of different durations~\citep{du2026vlwm}, while
+hierarchical world models use coarse predictions to guide
+local planning~\citep{zhang2026hwm}. Learned subgoals provide
+another temporal interface: FF-JEPA proposes successive
+subgoals with an action-free latent planner~\citep{masip2026ffjepa},
+and SAGE conditions action generation on predicted
+subgoals~\citep{cheng2026sage}. These approaches extend the
+futures available to the planner or guide its proposals.
+Evaluating the endpoint of an already generated candidate
+offers a complementary opportunity.
 
-The geometry and training of the evaluation signal are also central
-to effective planning. Temporal straightening regularizes latent
-trajectory curvature, improving the relationship between Euclidean
-and geodesic distance~\citep{wang2026straightening}. RC-aux combines
-multi-horizon predictive supervision with budget-conditioned
+The evaluation signal itself also benefits from planning-oriented
+structure. Temporal straightening regularizes latent trajectory
+curvature to improve distance geometry~\citep{wang2026straightening}.
+RC-aux combines multi-horizon prediction with budget-conditioned
 reachability correction~\citep{li2026rcaux}. Traj-LeWM learns a
-goal-conditioned latent trajectory cost that shapes representations
-during training and complements endpoint distance during
-planning~\citep{huang2026trajlewm}. Trajectory Reachability Metrics
-(TRM) learn a temporal pairwise cost from logged trajectories to
-rank predicted endpoints against goals~\citep{li2026trm}.
-These approaches show how temporal structure, reachability, and
-intermediate-path information can enrich the interface between
-prediction and action selection.
+goal-conditioned trajectory cost that complements endpoint
+distance~\citep{huang2026trajlewm}, while TRM learns a temporal
+pairwise cost for ranking predicted endpoints against
+goals~\citep{li2026trm}. These methods connect temporal,
+geometric, and path information with action selection.
 
-HAS focuses on the representation supplied to that interface.
-A short action-conditioned rollout determines the candidate
-endpoint, and a shared action-free map provides its temporal
-extension before Euclidean goal distance is evaluated.
-This use of local latent evolution places HAS alongside
-action-free latent planning~\citep{masip2026ffjepa}, while its
-endpoint-scoring role connects it to planning-oriented
-costs~\citep{li2026trm,huang2026trajlewm}. The distinctive design
-choice is to apply the extension after each candidate rollout
-and set its depth from the remaining temporal gap. We next
-formalize the time scales that define this operation.
+HAS focuses on the time-indexed representation supplied to the
+endpoint comparison. Its action-free Forward map connects to
+latent subgoal prediction~\citep{masip2026ffjepa}, and its scoring
+role connects to planning-oriented
+costs~\citep{li2026trm,huang2026trajlewm}. HAS applies the shared
+map after each action-conditioned candidate rollout and selects
+its depth from the remaining gap to the goal. The resulting
+temporal extension preserves Euclidean comparison while
+giving each short endpoint a longer-horizon scoring view.
 
 \section{Problem Setup}
 \label{sec:setup}
@@ -291,7 +262,7 @@ distant goals with direct endpoint scoring near the goal horizon.
 \label{sec:lewm}
 
 Forward learns from the local transitions already available to
-the world model. Each training sample contains four encoded
+the world model (Figure~\ref{fig:method}). Each training sample contains four encoded
 observations $z_{0:3}=E(x_{0:3})$ separated by one action block;
 here the subscripts index blocks within the sample. LeWM
 produces $p_{0:2}$, with $p_i$ predicting $z_{i+1}$.
@@ -335,11 +306,24 @@ Both draw supervision from the same four-observation sample.
 Inputs and targets are detached at the interface to Forward,
 so the direct gradients of $\mathcal{L}_F$ enter only $F$.
 The Forward objective has unit weight in training.
-We implement $F$ as a small residual MLP; its architecture and
-the supervision diagram are given in
-Appendix~\ref{app:implementation} and Figure~\ref{fig:method}.
+We implement $F$ as a small residual MLP, with architectural
+and optimization details in Appendix~\ref{app:implementation}.
 Local training produces a shared map that can be repeatedly
 applied at the depth selected by Equation~\ref{eq:depth}.
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=\linewidth]{figures/fig_has_training.pdf}
+\caption{Local and recursive supervision for Forward.
+LeWM predicts $p_i\approx z_{i+1}$ from the four-observation
+training window. Detached predictor outputs supervise the
+shared Forward map through $F(p_0)\rightarrow z_2$,
+$F(p_1)\rightarrow z_3$, and $F(F(p_0))\rightarrow z_3$.
+The schematic $P_i$ instances share the action-conditioned
+predictor parameters; each observation interval is one
+five-step action block.}
+\label{fig:method}
+\end{figure}
 
 \subsection{Receding-horizon integration}
 \label{sec:planning}
@@ -567,6 +551,47 @@ in TwoRoom and Reacher and near-matching success in PushT
 % Add a concise Robustness across training runs subsection and per-run
 % appendix table. No pending-result claims or placeholders in the PDF.
 
+\subsection{How temporal extension changes scoring}
+\label{sec:score-analysis}
+
+Temporal extension makes intermediate states more comparable to
+later goals in the learned latent space. To examine this operation,
+we compare the distance from an observed endpoint $z_H$ to its
+later goal $z_g$ with the distance after applying Forward:
+$\|z_H-z_g\|_2$ versus $\|F^k(z_H)-z_g\|_2$.
+The diagnostic uses $400$ evaluation-disjoint trajectory windows
+per task, with $H=25$ and $(k,o)\in\{(5,50),(10,75),(15,100)\}$.
+Using encoder endpoints exposes the transformation performed by
+Forward directly; Appendix~\ref{app:analysis} gives the sampling
+protocol.
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=\linewidth]{figures/fig_has_score_contrast.pdf}
+\caption{Endpoint-to-goal distances on $400$ evaluation-disjoint
+trajectory windows per task. Direct distances use encoder
+latents at $H=25$ and the goal offset $o$; extended distances
+apply $k=(o-H)/b$ Forward steps to the encoder endpoint.
+The horizontal axis gives Euclidean distance (the square
+root of the planning cost), and the vertical axis counts
+windows.}
+\label{fig:score}
+\end{figure}
+
+The extended representations generally occupy a lower
+endpoint-to-goal distance range (Figure~\ref{fig:score}).
+This pattern shows how locally learned evolution can bridge part
+of the representational gap between an intermediate state and
+a later goal. In PushT, the direct and extended distributions
+overlap more at the longest offset, consistent with the greater
+difficulty of recursive extension in this setting.
+The diagnostic makes the representational effect of HAS visible,
+while the closed-loop comparisons establish its control benefit.
+Its scope is the transformation of observed endpoint distances;
+candidate-ranking accuracy is a separate property.
+The paired executions below connect this scoring perspective
+to intermediate progress during control.
+
 \subsection{Planning behavior}
 \label{sec:analysis}
 
@@ -593,13 +618,6 @@ selected starts, while LeWM fails under the environment
 success criterion.}
 \label{fig:process}
 \end{figure}
-
-An offline diagnostic complements these behavioral examples
-by examining how Forward changes endpoint-to-goal distances
-on evaluation-disjoint trajectory windows
-(Appendix~\ref{app:analysis}). It compares encoder endpoints
-with their temporal extensions and provides an additional
-view of the learned scoring representation.
 
 \subsection{Limitations}
 \label{sec:limits}
@@ -685,20 +703,6 @@ supervision. All instances of $F$ share parameters, and
 the training losses average squared errors across latent
 dimensions and batch examples.
 
-\begin{figure}[tbp]
-\centering
-\includegraphics[width=\linewidth]{figures/fig_has_training.pdf}
-\caption{Local and recursive supervision for Forward.
-LeWM predicts $p_i\approx z_{i+1}$ from the four-observation
-training window. Detached predictor outputs supervise the
-shared Forward map through $F(p_0)\rightarrow z_2$,
-$F(p_1)\rightarrow z_3$, and $F(F(p_0))\rightarrow z_3$.
-The schematic $P_i$ instances share the action-conditioned
-predictor parameters; each observation interval is one
-five-step action block.}
-\label{fig:method}
-\end{figure}
-
 Forward operates on $192$-dimensional latents using two
 residual MLP blocks. Each block applies LayerNorm, a linear
 expansion to width $768$, GELU, and a linear projection back
@@ -760,54 +764,19 @@ the dynamic extension would have stopped.
 The ablation therefore evaluates a depth schedule over
 the whole execution.
 
-\section{Additional analysis}
+\section{Scoring diagnostic protocol}
 \label{app:analysis}
 
-The scoring diagnostic examines how temporal extension
-changes the distance between an intermediate representation
-and a later goal. We sample $400$ offline trajectory windows
-per task after excluding all episodes listed in the ten
-evaluation-group manifests. Each window covers at least
-$100$ environment steps and is encoded using the same
+Figure~\ref{fig:score} uses $400$ offline trajectory windows
+per task, sampled after excluding every episode listed in
+the ten evaluation-group manifests. Each window covers at
+least $100$ environment steps and is encoded using the same
 epoch-$10$ checkpoint as the control experiments.
-
-For each window, we obtain encoder latents at the short
-endpoint $H=25$ and goal offsets $o\in\{50,75,100\}$.
-We compare the Euclidean distances
-\[
-d_{\mathrm{direct}}=\|z_H-z_g\|_2,
-\qquad
-d_{\mathrm{extended}}=\|F^k(z_H)-z_g\|_2,
-\]
-where $(k,o)\in\{(5,50),(10,75),(15,100)\}$.
-These computations use observed endpoints encoded from the
-dataset. They measure the behavior of the Forward
-representation under temporal separation; candidate
-rollout prediction and CEM selection are outside this
-diagnostic.
-
-\begin{figure}[tbp]
-\centering
-\includegraphics[width=\linewidth]{figures/fig_has_score_contrast.pdf}
-\caption{Endpoint-to-goal distances on $400$ evaluation-disjoint
-trajectory windows per task. Direct distances use encoder
-latents at $H=25$ and the goal offset $o$; extended distances
-apply $k=(o-H)/b$ Forward steps to the encoder endpoint.
-The horizontal axis gives Euclidean distance (the square
-root of the planning cost), and the vertical axis counts
-windows.}
-\label{fig:score}
-\end{figure}
-
-The extended representations generally occupy a lower
-distance range than direct endpoint comparisons
-(Figure~\ref{fig:score}). In PushT, the two distributions
-overlap more at the longest offset, alongside the greater
-control difficulty observed at that offset.
-The diagnostic complements the closed-loop results by
-showing how the learned temporal map transforms the
-quantity used for scoring. Its evidential scope is
-representation-to-goal distance on observed windows,
-rather than candidate-ranking accuracy.
+For each window, $z_H$ is the encoder representation at
+$H=25$ and $z_g$ corresponds to offset $o\in\{50,75,100\}$.
+The Forward depth is $k=(o-H)/b$ with $b=5$.
+The plotted quantities are Euclidean norms; the planner uses
+their squares. This diagnostic evaluates encoded observations
+and their Forward extensions, with no CEM candidate search.
 
 \end{document}
