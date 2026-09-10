@@ -206,8 +206,8 @@ The predictor $P$ uses recent latent observations and action blocks
 to estimate the next latent, and a candidate sequence of $h$ blocks
 covers a planning span $H=hb$. We use $b=5$ and default $h=5$,
 giving $H=25$ environment steps. All time indices below are relative
-to the initial observation; one transition of $P$ or the Forward
-imaginer corresponds to one action block.
+to the initial observation, and each latent prediction step spans one
+action block.
 
 A goal image is sampled at offset $o$ from the initial observation
 and encoded as $z_g=E(x_o)$. After $e$ environment steps of execution,
@@ -242,9 +242,10 @@ evaluate its outcome.
 \subsection{Scoring beyond the planning span}
 \label{sec:alignment}
 
-HAS learns a deterministic map
-$F:\mathbb{R}^d\rightarrow\mathbb{R}^d$ representing one action
-block of latent evolution. At elapsed time $e$, it selects depth
+HAS learns an action-free latent predictor
+$F:\mathbb{R}^d\rightarrow\mathbb{R}^d$, where one application of
+$F$ represents one action block of latent evolution. At elapsed time
+$e$, it selects depth
 \begin{equation}
 k(e,o)=\max\left(\frac{o-e-H}{b},\,0\right).
 \label{eq:depth}
@@ -262,10 +263,11 @@ representation of its short-rollout endpoint.
 
 The two predictive stages serve complementary roles.
 The action-conditioned rollout captures the immediate consequences
-of the candidate sequence. Forward then supplies a learned
-continuation from that endpoint, using local evolution observed
-in the offline trajectories. Its input is a single latent, so
-this continuation summarizes evolution under the data distribution.
+of the candidate sequence. The action-free latent predictor then
+supplies a learned continuation from that endpoint, using local
+evolution observed in the offline trajectories. Its input is a single
+latent, so this continuation summarizes evolution under the data
+distribution.
 The extended representation provides a longer-term scoring view
 for selecting the current actions; the controller obtains the
 next action sequence through replanning from a fresh observation.
@@ -277,23 +279,24 @@ is the identity and Equation~\ref{eq:has-cost} becomes the
 LeWM terminal cost. HAS therefore joins extended scoring for
 distant goals with direct endpoint scoring near the goal horizon.
 
-\subsection{Learning the Forward imaginer}
+\subsection{Learning the action-free latent predictor}
 \label{sec:imaginer}
 \label{sec:lewm}
 
-Forward learns from the local transitions already available to
-the world model (Figure~\ref{fig:method}). Each training sample contains four encoded
-observations $z_{0:3}=E(x_{0:3})$ separated by one action block;
-here the subscripts index blocks within the sample. LeWM
-produces $p_{0:2}$, with $p_i$ predicting $z_{i+1}$.
+The predictor $F$ learns from local transitions already available to
+the world model (Figure~\ref{fig:method}). Each training sample contains
+four encoded observations $z_{0:3}=E(x_{0:3})$ separated by one action
+block; here the subscripts index blocks within the sample. LeWM produces
+$p_{0:2}$, with $p_i$ predicting $z_{i+1}$.
 
 \begin{figure}[!htbp]
 \centering
 \includegraphics[width=\linewidth]{figures/fig_has_training.pdf}
-\caption{Local and recursive supervision for Forward.
+\caption{Local and recursive supervision for the action-free latent
+predictor $F$.
 LeWM predicts $p_i\approx z_{i+1}$ from the four-observation
 training window. Detached predictor outputs supervise the
-shared Forward map through $F(p_0)\rightarrow z_2$,
+shared predictor $F$ through $F(p_0)\rightarrow z_2$,
 $F(p_1)\rightarrow z_3$, and $F(F(p_0))\rightarrow z_3$.
 The schematic $P_i$ instances share the action-conditioned
 predictor parameters; each observation interval is one
@@ -315,7 +318,7 @@ distribution~\citep{lewm2026}, and both predicted and target
 embeddings receive gradients from the prediction term.
 
 The alignment $p_i\approx z_{i+1}$ provides two one-step
-examples for Forward: $F(p_0)$ predicts $z_2$ and $F(p_1)$
+examples for $F$: $F(p_0)$ predicts $z_2$ and $F(p_1)$
 predicts $z_3$. Writing detached tensors with bars, the step loss is
 \begin{equation}
 \mathcal{L}_{\mathrm{step}}
@@ -336,13 +339,13 @@ giving
 \label{eq:forward-total}
 \end{equation}
 The step term fits local evolution, while the recursive term
-trains Forward to consume its own output over two transitions.
+trains $F$ to consume its own output over two transitions.
 Both draw supervision from the same four-observation sample, requiring
 no additional trajectories or targets at the evaluated goal offsets.
 
-Inputs and targets are detached at the interface to Forward,
+Inputs and targets are detached at the interface to $F$,
 so the direct gradients of $\mathcal{L}_F$ enter only $F$.
-The Forward objective has unit weight in training.
+The $\mathcal{L}_F$ objective has unit weight in training.
 We implement $F$ as a small residual MLP, with architectural
 and optimization details in Appendix~\ref{app:implementation}.
 Local training produces a shared map that can be repeatedly
@@ -354,7 +357,8 @@ applied at the depth selected by Equation~\ref{eq:depth}.
 HAS integrates into the Cross-Entropy Method
 (CEM)~\citep{rubinstein1999cem} through its candidate cost.
 CEM samples sequences of $h$ action blocks, predicts their
-endpoints with $P$, and scores their Forward extensions.
+endpoints with $P$, and scores their recursively extended
+representations.
 It then retains the lowest-cost candidates and fits a diagonal
 Gaussian to their empirical moments. After the final update,
 the controller executes the receding-horizon prefix of the
@@ -367,7 +371,8 @@ observation. Algorithm~\ref{alg:has-cem} summarizes one call.
 {\small
 \begin{algorithmic}[1]
 \Require current latent and recent context; goal $z_g$; offset $o$
-\Require predictor $P$; Forward $F$; block size $b$; span $H=hb$
+\Require predictors $P$ (action-conditioned) and $F$ (action-free)
+\Require block size $b$; span $H=hb$
 \Require candidates $N$; elites $M$; updates $J$
 \State $k\gets\max((o-e-H)/b,0)$
 \State $(\mu_0,\sigma_0)\gets\Call{InitializeCEM}{h}$
@@ -390,7 +395,7 @@ observation. Algorithm~\ref{alg:has-cem} summarizes one call.
 
 For each candidate, HAS adds $k$ evaluations of the residual
 MLP to the $h$-block action-conditioned rollout.
-The additional Forward computation scales linearly with
+The additional computation through $F$ scales linearly with
 recursion depth and candidate count, and decreases as the
 goal horizon approaches. The optimized action sequence
 retains its length of $h$ blocks.
@@ -514,13 +519,13 @@ $23.0\%$ with this longer-span configuration, compared with
 $70.4\%$ under HAS. Extending the scoring representation
 therefore provides a practical benefit beyond that obtained
 by the tested increase in planning span. This comparison
-motivates a closer examination of how the Forward extension
-itself should be scheduled.
+motivates a closer examination of how the recursive latent
+extension should be scheduled.
 
 \subsection{The role of alignment depth}
 \label{sec:ablation}
 
-The usefulness of Forward depends on how far it is applied.
+The usefulness of recursive latent extension depends on its depth.
 We compare the remaining-gap rule with fixed depths
 $k\in\{0,5,10,15\}$ on the same ten evaluation groups at
 $o\in\{75,100\}$ (Table~\ref{tab:k-depth}). A fixed depth
@@ -532,7 +537,7 @@ reduction as the controller approaches the goal horizon.
 \begin{table}[!htbp]
 \centering
 \caption{Success rate (\%; mean $\pm$ std over ten evaluation
-groups) under different Forward depths. HAS uses the
+groups) under different recursion-depth schedules. HAS uses the
 remaining-gap rule; fixed $k$ is reapplied at every replan.
 The world-model checkpoint, starts, and CEM configuration
 are shared within each task and evaluation group.}
@@ -551,7 +556,8 @@ $40.4\%$, while fixed depths of $5$ or more remain at $4.0\%$
 or below. Repeated extension alone is therefore insufficient;
 adapting its depth during execution is an important part of
 the scoring design. The fixed-depth results also make clear
-that applying more Forward steps need not improve control.
+that applying more recursive prediction steps need not improve
+control.
 
 The exception is TwoRoom at $o=100$: fixed $k=5$ achieves
 $76.2\%$, compared with $70.4\%$ for HAS. The preferred depth
@@ -660,7 +666,7 @@ budgets could change the relative performance.
 The time scale of candidate evaluation matters when a visual
 world model plans toward goals beyond its prediction span.
 HAS gives short action-conditioned endpoints a longer scoring
-view through a locally trained Forward imaginer and a
+view through a locally trained action-free latent predictor and a
 remaining-gap recursion rule. Across PushT, TwoRoom, and
 Reacher, this design improves long-offset goal reaching and
 exceeds the evaluated longer-span LeWM configuration.
@@ -693,8 +699,8 @@ validation of control safety and failure recovery.
 Sections~\ref{sec:setup} and~\ref{sec:method} specify the time
 scales, training objectives, gradient boundaries, recursion
 rule, and planning algorithm.
-Appendix~\ref{app:implementation} gives the Forward architecture
-and optimization settings, and Appendix~\ref{app:protocol}
+Appendix~\ref{app:implementation} gives the action-free predictor
+architecture and optimization settings, and Appendix~\ref{app:protocol}
 describes the paired evaluation and aggregation procedure.
 The table captions identify the statistical units used for
 the reported results. Appendix~\ref{app:analysis} documents
@@ -712,30 +718,30 @@ diagnostic.
 
 Each training window contains four observations sampled every
 five environment steps. Predictor outputs $p_0,p_1,p_2$ align
-with encoder latents $z_1,z_2,z_3$, respectively. Forward uses
-$p_0$ and $p_1$ as one-step inputs with targets $z_2$ and $z_3$;
-its recursive example maps $p_0$ to $z_3$ through two
+with encoder latents $z_1,z_2,z_3$, respectively. The action-free
+predictor $F$ uses $p_0$ and $p_1$ as one-step inputs with targets
+$z_2$ and $z_3$; its recursive example maps $p_0$ to $z_3$ through two
 applications. Figure~\ref{fig:method} summarizes this
 supervision. All instances of $F$ share parameters, and
 the training losses average squared errors across latent
 dimensions and batch examples.
 
-Forward operates on $192$-dimensional latents using two
+$F$ operates on $192$-dimensional latents using two
 residual MLP blocks. Each block applies LayerNorm, a linear
 expansion to width $768$, GELU, and a linear projection back
 to $192$ dimensions before the residual addition. A final
 LayerNorm and linear projection produce the output.
 The input consists of one latent representation.
 Predictor inputs and encoder targets are detached before
-the Forward losses, so their direct gradients update
-Forward parameters.
+the losses associated with $F$, so their direct gradients update
+only the parameters of $F$.
 
 Training uses AdamW with learning rate $5\times10^{-5}$,
 weight decay $10^{-3}$, batch size $128$, bfloat16
 precision, and global gradient clipping at norm $1.0$.
-The LeWM SIGReg coefficient is $0.09$. Both the Forward
-step and recursive terms have coefficient $1.0$, as does
-the complete Forward objective in the training loop.
+The LeWM SIGReg coefficient is $0.09$. Both the step and recursive
+terms for $F$ have coefficient $1.0$, as does the complete
+$\mathcal{L}_F$ objective in the training loop.
 The reported comparisons use the epoch-$10$ checkpoint
 from one training run per task.
 
@@ -743,7 +749,7 @@ The checkpoint-producing implementation also includes a
 parameter-disjoint backward auxiliary head.
 Its inputs and targets are detached, so its loss supplies
 direct gradients only to that head.
-HAS evaluation uses the Forward scoring path described
+HAS evaluation uses the recursive scoring path described
 in Section~\ref{sec:method}.
 
 \section{Evaluation protocol}
@@ -774,7 +780,7 @@ and the same checkpoint within each task.
 The dynamic rule uses
 $k=\max((o-e-H)/b,0)$, with every positive remainder
 divisible by $b$ in the evaluated configurations.
-When $k=0$, the Forward map is bypassed.
+When $k=0$, $F$ is bypassed.
 For fixed-depth evaluation, the specified depth overrides
 this rule at every replanning step, including steps after
 the dynamic extension would have stopped.
@@ -791,9 +797,10 @@ least $100$ environment steps and is encoded using the same
 epoch-$10$ checkpoint as the control experiments.
 For each window, $z_H$ is the encoder representation at
 $H=25$ and $z_g$ corresponds to offset $o\in\{50,75,100\}$.
-The Forward depth is $k=(o-H)/b$ with $b=5$.
+The recursion depth is $k=(o-H)/b$ with $b=5$.
 The plotted quantities are Euclidean norms; the planner uses
 their squares. This diagnostic evaluates encoded observations
-and their Forward extensions, with no CEM candidate search.
+and their recursively extended representations, with no CEM candidate
+search.
 
 \end{document}
