@@ -140,13 +140,14 @@ HAS, which learns an action-free latent predictor using only LeWM's
 existing training trajectories, applies it recursively to each candidate
 endpoint, and adapts the extension depth to the remaining temporal gap
 without lengthening the action-conditioned search. Third, experiments
-on PushT, TwoRoom, and Reacher across three training seeds per task and
-ten paired evaluation seeds per trained model show that HAS improves
-mean success at every tested goal distance beyond LeWM's default
-planning span. Comparisons with a tested longer-span planner and fixed
-extension depths further show that neither simply increasing the action
-horizon nor applying a constant amount of temporal extension can
-consistently reproduce these gains.
+across three visual-control benchmarks spanning object manipulation,
+navigation, and reaching, with three training seeds per task and ten
+paired evaluation seeds per trained model, show that HAS improves mean
+success at every tested goal distance beyond LeWM's default planning
+span. Comparisons with a tested longer-span planner and fixed extension
+depths further show that neither simply increasing the action horizon
+nor applying a constant amount of temporal extension can consistently
+reproduce these gains.
 
 \section{Related Work}
 \label{sec:related}
