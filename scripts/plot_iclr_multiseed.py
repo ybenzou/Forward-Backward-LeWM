@@ -344,7 +344,7 @@ def plot_success(data, dest: Path, longcem=None) -> None:
         labels,
         loc="lower center",
         ncol=ncol,
-        bbox_to_anchor=(0.52, 0.855),
+        bbox_to_anchor=(0.52, 0.89),
         handlelength=2.2,
         columnspacing=1.6,
         borderaxespad=0.0,
