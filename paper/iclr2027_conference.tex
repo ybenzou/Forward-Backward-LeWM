@@ -58,10 +58,11 @@ visual goal. When the goal lies beyond this span, however, direct
 endpoint scoring can become temporally myopic and undervalue actions
 whose benefits emerge through later execution. We introduce
 Horizon-Aligned Scoring (HAS), which learns an action-free latent
-predictor from local transitions and applies it recursively to extend
-each action-conditioned endpoint to the goal's time scale before
-scoring. The recursion depth follows the remaining temporal gap and
-decreases during execution. Across three training seeds per task and
+predictor from local transitions in LeWM's existing reward-free
+trajectories and applies it recursively to extend each action-conditioned
+endpoint to the goal's time scale before scoring. The recursion depth
+follows the remaining temporal gap and decreases during execution.
+Across three training seeds per task and
 ten paired evaluation seeds per trained model on PushT, TwoRoom, and
 Reacher, HAS improves mean success at every tested goal distance beyond
 LeWM's default $25$-step planning span, with particularly large gains
@@ -101,13 +102,16 @@ horizon and the goal horizon as a limitation of terminal scoring.
 Horizon-Aligned Scoring (HAS) changes the representation used to score
 CEM candidates (Figure~\ref{fig:overview}). The action-conditioned
 predictor first produces each candidate's fixed-span endpoint. An
-action-free latent predictor, learned from local latent transitions,
-then recursively advances that endpoint before it is compared with the
-goal. One-step and recursive supervision support repeated application.
-During planning, the remaining temporal gap determines the recursion
-depth, which decreases as execution advances. HAS thereby extends the
-temporal reach of candidate scoring while leaving the CEM sampling and
-update rules, as well as the candidate action horizon, unchanged.
+action-free latent predictor, learned from local latent transitions in
+the same offline trajectories, then recursively advances that endpoint
+before it is compared with the goal. One-step and recursive supervision
+from those trajectories support repeated application; no additional
+data collection or supervision at the evaluated goal distances is
+required. During planning, the remaining temporal gap determines the
+recursion depth, which decreases as execution advances. HAS thereby
+extends the temporal reach of candidate scoring while leaving the CEM
+sampling and update rules, as well as the candidate action horizon,
+unchanged.
 
 \begin{figure}[!htbp]
 \centering
@@ -131,16 +135,17 @@ recovering the original LeWM score.}
 Our contributions are threefold. First, we formulate the mismatch
 between fixed-span rollout endpoints and longer-offset visual goals as
 a terminal-scoring problem in LeWM-based planning. Second, we introduce
-HAS, which recursively extends each candidate endpoint with an
-action-free latent predictor and adapts the extension depth to the
-remaining temporal gap without lengthening the action-conditioned
-search. Third, experiments on PushT, TwoRoom, and Reacher across three
-training seeds per task and ten paired evaluation seeds per trained
-model show that HAS improves mean success at every tested goal distance
-beyond LeWM's default planning span. Comparisons with a tested longer-span
-planner and fixed extension depths further show that neither simply
-increasing the action horizon nor applying a constant amount of temporal
-extension can consistently reproduce these gains.
+HAS, which learns an action-free latent predictor using only LeWM's
+existing training trajectories, applies it recursively to each candidate
+endpoint, and adapts the extension depth to the remaining temporal gap
+without lengthening the action-conditioned search. Third, experiments
+on PushT, TwoRoom, and Reacher across three training seeds per task and
+ten paired evaluation seeds per trained model show that HAS improves
+mean success at every tested goal distance beyond LeWM's default
+planning span. Comparisons with a tested longer-span planner and fixed
+extension depths further show that neither simply increasing the action
+horizon nor applying a constant amount of temporal extension can
+consistently reproduce these gains.
 
 \section{Related Work}
 \label{sec:related}
@@ -332,7 +337,8 @@ giving
 \end{equation}
 The step term fits local evolution, while the recursive term
 trains Forward to consume its own output over two transitions.
-Both draw supervision from the same four-observation sample.
+Both draw supervision from the same four-observation sample, requiring
+no additional trajectories or targets at the evaluated goal offsets.
 
 Inputs and targets are detached at the interface to Forward,
 so the direct gradients of $\mathcal{L}_F$ enter only $F$.
