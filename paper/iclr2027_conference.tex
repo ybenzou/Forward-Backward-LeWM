@@ -317,34 +317,41 @@ with batch averaging implicit. SIGReg regularizes the embedding
 distribution~\citep{lewm2026}, and both predicted and target
 embeddings receive gradients from the prediction term.
 
-The alignment $p_i\approx z_{i+1}$ provides two one-step
-examples for $F$: $F(p_0)$ predicts $z_2$ and $F(p_1)$
-predicts $z_3$. Writing detached tensors with bars, the step loss is
+At inference, $F$ receives an endpoint predicted by $P$, rather than a
+latent encoded directly from an observation. We therefore train $F$ on
+LeWM predictor outputs. For a four-observation training window, LeWM
+produces $p_i\approx z_{i+1}$. Thus, $p_i$ represents the predicted
+latent at block $i+1$, and one application of $F$ should advance it to
+$z_{i+2}$. Only $p_0$ and $p_1$ have one-block-ahead encoder targets
+within this window. Letting bars denote stop-gradient copies, we define
 \begin{equation}
 \mathcal{L}_{\mathrm{step}}
-=\frac{1}{2}\left[
-D(F(\bar p_0),\bar z_2)+D(F(\bar p_1),\bar z_3)\right].
+=\frac{1}{2}\sum_{i=0}^{1}
+D\!\left(F(\bar p_i),\bar z_{i+2}\right).
 \label{eq:forward-step}
 \end{equation}
-A second term supervises the composition used during planning:
+HAS applies $F$ recursively during planning, so we additionally
+supervise a two-block extension from $p_0$:
 \begin{equation}
 \mathcal{L}_{\mathrm{roll}}
 =D(F(F(\bar p_0)),\bar z_3),
 \label{eq:forward-roll}
 \end{equation}
-giving
+The complete action-free predictor objective is
 \begin{equation}
 \mathcal{L}_F
 =\mathcal{L}_{\mathrm{step}}+\mathcal{L}_{\mathrm{roll}}.
 \label{eq:forward-total}
 \end{equation}
-The step term fits local evolution, while the recursive term
-trains $F$ to consume its own output over two transitions.
-Both draw supervision from the same four-observation sample, requiring
-no additional trajectories or targets at the evaluated goal offsets.
+The one-step term trains local continuation from LeWM-predicted
+endpoints, while the recursive term exposes $F$ to its own output and
+constrains the two-block composition used during planning. Gradients
+pass through both applications of $F$, but the detached inputs and
+targets prevent $\mathcal{L}_F$ from directly updating $P$ or $E$.
+Both terms use the same four-observation training window as LeWM,
+requiring no additional trajectories or targets at the evaluated goal
+offsets.
 
-Inputs and targets are detached at the interface to $F$,
-so the direct gradients of $\mathcal{L}_F$ enter only $F$.
 The $\mathcal{L}_F$ objective has unit weight in training.
 We implement $F$ as a small residual MLP, with architectural
 and optimization details in Appendix~\ref{app:implementation}.
