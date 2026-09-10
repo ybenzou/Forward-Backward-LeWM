@@ -112,12 +112,18 @@ update rules, as well as the candidate action horizon, unchanged.
 \begin{figure}[!htbp]
 \centering
 \includegraphics[width=\linewidth]{figures/fig_has_evaluation.pdf}
-\caption{\textbf{A longer scoring view for a short action plan.}
-The action-conditioned predictor produces an endpoint at $e+H$.
-For a later goal at offset $o$, HAS applies the shared action-free
-latent predictor across the remaining action blocks and evaluates the
-extended representation against the goal embedding. The diagram depicts
-$o>e+H$; at later replans the extension decreases to zero.}
+\caption{\textbf{Horizon-aligned scoring within LeWM's CEM planner.}
+$E$, $P$, and $F$ denote the encoder, action-conditioned latent
+predictor, and action-free latent predictor, respectively. At elapsed
+time $e$, LeWM rolls a candidate action sequence $a_{1:H}$ to the
+endpoint $\hat z_{e+H}$. When the goal time $o$ lies beyond this endpoint,
+direct comparison with the goal embedding $z_g$ can create a temporal
+mismatch in terminal scoring (red dashed arc). HAS instead applies the
+shared $F$ recursively across the remaining temporal gap and scores
+$F^k(\hat z_{e+H})$ against $z_g$, where $k=(o-e-H)/b$ and $b$ is the
+temporal block size. Superscripts on $F$ index recursive applications,
+not distinct predictors. As execution advances, $k$ decreases to zero,
+recovering the original LeWM score.}
 \label{fig:overview}
 \end{figure}
 \FloatBarrier
