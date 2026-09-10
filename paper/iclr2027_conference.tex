@@ -51,25 +51,28 @@ Address \\
 \maketitle
 
 \begin{abstract}
-Visual world-model planners evaluate candidate actions through short
-latent rollouts, while their goals often require progress over a longer
-time scale. Direct endpoint-to-goal distance can undervalue actions
-whose benefits emerge after the current planning span. We introduce
-Horizon-Aligned Scoring (HAS), which gives each short-rollout endpoint
-a longer-horizon scoring view. HAS learns an action-free Forward
-imaginer from local latent transitions and recursively extends the
-action-conditioned endpoint before computing its distance to the
-visual goal. The recursion depth follows the remaining temporal gap
-and decreases as execution advances. Across ten paired evaluation
-groups on PushT, TwoRoom, and Reacher, HAS improves mean success at
-every evaluated goal offset beyond the default planning span.
-It raises PushT success from $42.8\%$ to $67.8\%$ at offset $50$ and
-TwoRoom success from $16.4\%$ to $70.4\%$ at offset $100$.
-HAS also exceeds the evaluated longer-span LeWM configuration at all
-offsets of $50$ steps or more, while a fixed-depth comparison highlights
-the importance of adapting the extension during execution.
-These results establish the scoring time scale as an effective design
-dimension for short-horizon world-model planning.
+LeWorldModel (LeWM) enables reward-free visual control by learning
+latent dynamics for goals specified after training. It ranks candidate
+action sequences by comparing fixed-span rollout endpoints with the
+visual goal. When the goal lies beyond this span, however, direct
+endpoint scoring can become temporally myopic and undervalue actions
+whose benefits emerge through later execution. We introduce
+Horizon-Aligned Scoring (HAS), which learns an action-free latent
+predictor from local transitions and applies it recursively to extend
+each action-conditioned endpoint to the goal's time scale before
+scoring. The recursion depth follows the remaining temporal gap and
+decreases during execution. Across three training seeds per task and
+ten paired evaluation seeds per trained model on PushT, TwoRoom, and
+Reacher, HAS improves mean success at every tested goal distance beyond
+LeWM's default $25$-step planning span, with particularly large gains
+for goals $50$ steps ahead in PushT and $100$ steps ahead in TwoRoom.
+HAS recovers the default LeWM scorer when no extension is needed and
+outperforms the evaluated $50$-step LeWM configuration at every longer
+goal distance. Fixed-depth comparisons show that no constant extension
+depth performs consistently across conditions. These results demonstrate
+that aligning the temporal reach of endpoint scoring with the goal
+horizon mitigates temporal myopia in goal-conditioned world-model
+planning.
 \end{abstract}
 
 \section{Introduction}
