@@ -306,7 +306,7 @@ five-step action block.}
 \FloatBarrier
 
 Define the mean squared latent error as
-$D(z,z')=\|z-z'\|_2^2/d$. The world-model objective is
+$D(z,z')=\frac{1}{d}\|z-z'\|_2^2$. The world-model objective is
 \begin{equation}
 \mathcal{L}_{\mathrm{LeWM}}
 =\frac{1}{3}\sum_{i=0}^{2}D(p_i,z_{i+1})
