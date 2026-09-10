@@ -82,9 +82,10 @@ planning.
 LeWorldModel (LeWM)~\citep{lewm2026} enables reward-free visual goal
 reaching by jointly learning an encoder and an action-conditioned latent
 predictor from offline trajectories. At test time, LeWM uses the
-cross-entropy method (CEM) to optimize action sequences: sampled
-candidates are rolled out through the latent predictor and ranked by
-the distance between their predicted endpoints and a goal image.
+cross-entropy method (CEM)~\citep{rubinstein1999cem} to optimize action
+sequences: sampled candidates are rolled out through the latent predictor
+and ranked by the distance between their predicted endpoints and a goal
+image.
 This simple interface supports goals specified after training and makes
 LeWM an effective local planner. However, it also ties the temporal
 reach of candidate evaluation to the action-conditioned rollout span.
@@ -361,16 +362,13 @@ applied at the depth selected by Equation~\ref{eq:depth}.
 \subsection{Receding-horizon integration}
 \label{sec:planning}
 
-HAS integrates into the Cross-Entropy Method
-(CEM)~\citep{rubinstein1999cem} through its candidate cost.
-CEM samples sequences of $h$ action blocks, predicts their
-endpoints with $P$, and scores their recursively extended
-representations.
-It then retains the lowest-cost candidates and fits a diagonal
-Gaussian to their empirical moments. After the final update,
-the controller executes the receding-horizon prefix of the
-mean sequence, advances $e$, and replans from the new
-observation. Algorithm~\ref{alg:has-cem} summarizes one call.
+HAS modifies only the candidate cost in LeWM's CEM controller.
+At each update, Equation~\ref{eq:has-cost} scores every $h$-block
+candidate; CEM retains the $M$ lowest-cost sequences and refits a
+diagonal Gaussian to their empirical moments. After $J$ updates, the
+controller executes the designated prefix of the mean sequence,
+increments the elapsed time $e$, and replans from the latest
+observation. Algorithm~\ref{alg:has-cem} summarizes this procedure.
 
 \begin{algorithm}[!htbp]
 \caption{Horizon-Aligned CEM at elapsed time $e$}
