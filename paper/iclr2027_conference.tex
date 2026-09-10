@@ -180,15 +180,16 @@ pairwise cost for ranking predicted endpoints against
 goals~\citep{li2026trm}. These methods connect temporal,
 geometric, and path information with action selection.
 
-HAS focuses on the time-indexed representation supplied to the
-endpoint comparison. Its action-free Forward map connects to
-latent subgoal prediction~\citep{masip2026ffjepa}, and its scoring
-role connects to planning-oriented
-costs~\citep{li2026trm,huang2026trajlewm}. HAS applies the shared
-map after each action-conditioned candidate rollout and selects
-its depth from the remaining gap to the goal. The resulting
-temporal extension preserves Euclidean comparison while
-giving each short endpoint a longer-horizon scoring view.
+HAS instead focuses on the temporal representation supplied to the
+endpoint comparison. Its recursive action-free latent prediction is
+related to latent subgoal prediction~\citep{masip2026ffjepa}, while its
+use for ranking action-conditioned endpoints relates to
+planning-oriented costs~\citep{li2026trm,huang2026trajlewm}. Unlike
+methods that propose subgoals or learn a new comparison function, HAS
+applies a shared latent predictor after each candidate rollout, selects
+the recursion depth from the remaining gap to the goal, and retains
+Euclidean goal distance. This gives each short endpoint a longer-horizon
+scoring view without changing the CEM proposal or update rules.
 
 \section{Problem Setup}
 \label{sec:setup}
