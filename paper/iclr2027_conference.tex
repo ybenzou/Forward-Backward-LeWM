@@ -78,62 +78,63 @@ planning.
 \section{Introduction}
 \label{sec:intro}
 
-Visual world models support goal-conditioned control by encoding
-observations, predicting candidate actions, and evaluating the resulting
-latent outcomes against a goal image. Learning from reward-free
-trajectories lets the same model support goals specified after
-training~\citep{sobal2025rewardfree,zhou2025dinowm,lewm2026}.
-This interface depends on both local predictive dynamics and a scoring
-rule that recognizes useful progress. For distant goals, short-term
-actions often establish an intermediate state whose value emerges
-through subsequent execution. The scoring rule must connect this
-local prediction with the longer-term objective.
+LeWorldModel (LeWM)~\citep{lewm2026} enables reward-free visual goal
+reaching by jointly learning an encoder and an action-conditioned latent
+predictor from offline trajectories. At test time, LeWM uses the
+cross-entropy method (CEM) to optimize action sequences: sampled
+candidates are rolled out through the latent predictor and ranked by
+the distance between their predicted endpoints and a goal image.
+This simple interface supports goals specified after training and makes
+LeWM an effective local planner. However, it also ties the temporal
+reach of candidate evaluation to the action-conditioned rollout span.
 
-LeWorldModel (LeWM)~\citep{lewm2026}, an end-to-end Joint-Embedding
-Predictive Architecture (JEPA)~\citep{lecun2022jepa}, ranks candidate
-sequences by endpoint-to-goal latent distance. With its default
-$25$-step planning span, an endpoint may represent only an intermediate
-stage of a longer task. Movement toward a passage, for example, can
-enable reaching another room while ending far from the goal.
-Direct terminal distance then asks the intermediate representation
-to stand in for its later consequences. We frame this temporal
-mismatch as a limitation of terminal scoring and seek a longer-term
-view of each candidate's endpoint.
+When the goal lies beyond this span, a predicted endpoint represents
+only an intermediate stage of the task. An action can therefore enable
+useful later progress while leaving its immediate endpoint far from the
+goal. Moving toward a passage, for example, can be necessary for
+reaching another room even though the resulting short-rollout endpoint
+remains distant from the final goal. Direct endpoint-to-goal distance
+can consequently undervalue actions whose benefits emerge only through
+subsequent execution. We formulate this mismatch between the rollout
+horizon and the goal horizon as a limitation of terminal scoring.
 
-Horizon-Aligned Scoring (HAS) supplies this view through a learned
-temporal extension (Figure~\ref{fig:overview}). The action-conditioned
-predictor first produces the short-rollout endpoint. An action-free
-Forward imaginer recursively advances that endpoint before its
-distance to the goal is evaluated. Forward learns from local latent
-transitions, with one-step and recursive supervision supporting its
-repeated use. During planning, the remaining temporal gap determines
-the extension depth, which decreases as execution advances.
-This design gives the current action sequence a longer scoring
-view while retaining short action-conditioned search.
+Horizon-Aligned Scoring (HAS) changes the representation used to score
+CEM candidates (Figure~\ref{fig:overview}). The action-conditioned
+predictor first produces each candidate's fixed-span endpoint. An
+action-free latent predictor, learned from local latent transitions,
+then recursively advances that endpoint before it is compared with the
+goal. One-step and recursive supervision support repeated application.
+During planning, the remaining temporal gap determines the recursion
+depth, which decreases as execution advances. HAS thereby extends the
+temporal reach of candidate scoring while leaving the CEM sampling and
+update rules, as well as the candidate action horizon, unchanged.
 
 \begin{figure}[!htbp]
 \centering
 \includegraphics[width=\linewidth]{figures/fig_has_evaluation.pdf}
 \caption{\textbf{A longer scoring view for a short action plan.}
 The action-conditioned predictor produces an endpoint at $e+H$.
-For a later goal at offset $o$, HAS applies the shared Forward map
-across the remaining action blocks and evaluates the extended
-representation against the goal embedding. The diagram depicts
+For a later goal at offset $o$, HAS applies the shared action-free
+latent predictor across the remaining action blocks and evaluates the
+extended representation against the goal embedding. The diagram depicts
 $o>e+H$; at later replans the extension decreases to zero.}
 \label{fig:overview}
 \end{figure}
 \FloatBarrier
 
-We evaluate this scoring design across ten paired evaluation groups
-on PushT, TwoRoom, and Reacher. HAS improves mean success at every
-tested offset beyond the default span, including a gain from
-$16.4\%$ to $70.4\%$ in TwoRoom at offset $100$.
-It also exceeds the evaluated longer-span LeWM configuration,
-and the fixed-depth comparison identifies the value of adapting
-the extension during execution. Together, these results establish
-a temporal perspective on endpoint scoring, instantiate it with a
-locally trained Forward map, and demonstrate its practical value
-for longer-horizon control.
+Our contributions are threefold. First, we formulate the mismatch
+between fixed-span rollout endpoints and longer-offset visual goals as
+a terminal-scoring problem in LeWM-based planning. Second, we introduce
+HAS, which recursively extends each candidate endpoint with an
+action-free latent predictor and adapts the extension depth to the
+remaining temporal gap without lengthening the action-conditioned
+search. Third, experiments on PushT, TwoRoom, and Reacher across three
+training seeds per task and ten paired evaluation seeds per trained
+model show that HAS improves mean success at every tested goal distance
+beyond LeWM's default planning span. Comparisons with a tested longer-span
+planner and fixed extension depths further show that neither simply
+increasing the action horizon nor applying a constant amount of temporal
+extension can consistently reproduce these gains.
 
 \section{Related Work}
 \label{sec:related}
