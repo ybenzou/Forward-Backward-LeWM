@@ -589,11 +589,9 @@ fixed, single-checkpoint $H=25$ reference from Table~\ref{tab:main},
 not a separately trained baseline matched to each HAS seed.
 
 \begin{table}[!htbp]
-\caption{Success rates (\%) across HAS training runs. The LeWM reference
-uses one checkpoint and ten evaluation groups; each HAS seed uses its
-own checkpoint and the same ten groups. The final column reports
-mean $\pm$ sample standard deviation across the three HAS run means.
-The LeWM reference is not training-seed matched.}
+\caption{Success rates (\%) across three HAS training seeds.
+The last column reports their mean $\pm$ sample standard deviation;
+LeWM is the fixed reference from Table~\ref{tab:main}.}
 \label{tab:train-runs}
 \begin{center}
 \small
@@ -639,11 +637,31 @@ LeWM--HAS improvements.
 \subsection{How temporal extension changes scoring}
 \label{sec:score-analysis}
 
-An evaluation-disjoint diagnostic over $400$ windows per task shows
-that recursive extension generally lowers endpoint-to-goal latent
-distance. The direct and extended distributions overlap more for
-PushT at the longest offset. Appendix~\ref{app:analysis} gives the
-figure, interpretation, and sampling protocol.
+On $400$ evaluation-disjoint windows per task, we compare the
+observed endpoint-to-goal distance $\|z_H-z_g\|_2$ with its
+recursively extended counterpart $\|F^k(z_H)-z_g\|_2$
+(Figure~\ref{fig:score}).
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=0.95\linewidth]{figures/fig_has_score_contrast.pdf}
+\caption{Observed endpoint-to-goal distances before and after
+temporal extension for $400$ evaluation-disjoint windows per task
+($H=25$). Axes show Euclidean distance and window count.}
+\label{fig:score}
+\end{figure}
+\FloatBarrier
+
+The extended representations generally occupy a lower
+endpoint-to-goal distance range (Figure~\ref{fig:score}).
+This pattern shows how locally learned evolution can bridge part
+of the representational gap between an intermediate state and
+a later goal. In PushT, the direct and extended distributions
+overlap more at the longest offset, consistent with the greater
+difficulty of recursive extension in this setting.
+The diagnostic exposes the transformation of observed endpoint
+distances, while closed-loop comparisons establish the control
+benefit. Appendix~\ref{app:analysis} gives the sampling protocol.
 
 \subsection{Planning behavior}
 \label{sec:analysis}
@@ -821,37 +839,8 @@ the dynamic extension would have stopped.
 The ablation therefore evaluates a depth schedule over
 the whole execution.
 
-\section{Scoring diagnostic}
+\section{Scoring diagnostic protocol}
 \label{app:analysis}
-
-Temporal extension makes intermediate states more comparable to
-later goals. We examine this transformation directly on encoder
-endpoints, comparing $\|z_H-z_g\|_2$ with
-$\|F^k(z_H)-z_g\|_2$ over $400$ evaluation-disjoint windows per
-task. We use $H=25$ and $(k,o)\in\{(5,50),(10,75),(15,100)\}$.
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=0.95\linewidth]{figures/fig_has_score_contrast.pdf}
-\caption{Temporal extension of observed endpoint distances:
-$\|z_H-z_g\|_2$ versus $\|F^k(z_H)-z_g\|_2$ on $400$
-evaluation-disjoint windows per task ($H=25$).
-Axes show Euclidean distance and window count.}
-\label{fig:score}
-\end{figure}
-\FloatBarrier
-
-The extended representations generally occupy a lower
-endpoint-to-goal distance range (Figure~\ref{fig:score}).
-This pattern shows how locally learned evolution can bridge part
-of the representational gap between an intermediate state and
-a later goal. In PushT, the direct and extended distributions
-overlap more at the longest offset, consistent with the greater
-difficulty of recursive extension in this setting.
-The diagnostic exposes the transformation of observed endpoint
-distances, while closed-loop comparisons establish the control
-benefit. Paired executions connect this scoring perspective to
-intermediate progress during control.
 
 Figure~\ref{fig:score} uses $400$ offline trajectory windows
 per task, sampled after excluding every episode listed in
