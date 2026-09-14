@@ -51,26 +51,24 @@ Address \\
 \maketitle
 
 \begin{abstract}
-LeWorldModel (LeWM) enables reward-free visual control by learning
-latent dynamics for goals specified after training. It scores candidate
-action sequences using fixed-span latent rollouts, which can overlook
-actions whose benefits emerge beyond the planning span. We introduce
-Horizon-Aligned Scoring (HAS), which recursively extends each rollout
-endpoint using an action-free latent predictor trained on LeWM's existing
-reward-free trajectories. The extension depth follows the remaining
-temporal gap and decreases during execution. In a paired evaluation on
-PushT, TwoRoom, and Reacher, HAS improves mean success at every tested
-goal offset beyond LeWM's default $25$-step planning span. PushT success
-at offset $50$ rises from $42.8\%$ to $67.8\%$, and TwoRoom success at
-offset $100$ from $16.4\%$ to $70.4\%$. Across three independent HAS
-training runs per task, success at offset $50$ is
-$(68.5\pm2.7)\%$, $(79.9\pm1.2)\%$, and $(96.9\pm1.0)\%$ on the
-three tasks, respectively (mean $\pm$ standard deviation). HAS also
-exceeds the evaluated $50$-step LeWM planner at
-every offset, while fixed-depth ablations show the value of adapting
-the extension during execution. Aligning scoring depth with goal horizon
-thus improves long-offset control without lengthening action-conditioned
-planning.
+LeWorldModel (LeWM) learns visual latent dynamics from reward-free
+trajectories and uses the cross-entropy method (CEM) to plan toward
+image goals. It scores candidate action sequences by their predicted
+endpoints, so short rollouts can undervalue actions that enable later
+progress. We introduce Horizon-Aligned Scoring (HAS), which uses an
+action-free latent predictor to extend each endpoint toward the goal's
+time scale before scoring. Trained on the same trajectories as LeWM,
+this predictor needs no additional data; its recursion depth adapts to
+the remaining time to the goal. HAS thus changes how CEM evaluates
+actions without lengthening its action-conditioned search. Across PushT,
+TwoRoom, and Reacher, HAS improves mean success for goals beyond LeWM's
+default $25$-step planning span. For goals $50$ steps ahead, PushT
+success rises from $42.8\%$ to $67.8\%$; for goals $100$ steps ahead,
+TwoRoom success rises from $16.4\%$ to $70.4\%$. This long-range
+performance persists across three independently trained HAS models per
+task. A longer-span LeWM planner does not reproduce these gains,
+highlighting better evaluation of candidate actions---not simply longer
+CEM search---as the key to long-range control.
 \end{abstract}
 
 \section{Introduction}
