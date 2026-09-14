@@ -79,13 +79,12 @@ action-conditioned planning horizon.
 \section{Introduction}
 \label{sec:intro}
 
-LeWorldModel (LeWM)~\citep{lewm2026} enables reward-free visual goal
-reaching by jointly learning an encoder and an action-conditioned latent
-predictor from offline trajectories. At test time, LeWM uses the
-cross-entropy method (CEM)~\citep{rubinstein1999cem} to optimize action
-sequences: sampled candidates are rolled out through the latent predictor
-and ranked by the distance between their predicted endpoints and a goal
-image.
+LeWorldModel (LeWM)~\citep{lewm2026} jointly learns an encoder and an
+action-conditioned latent predictor from reward-free offline trajectories.
+At test time, LeWM uses the cross-entropy method
+(CEM)~\citep{rubinstein1999cem} to plan toward image goals: sampled
+action sequences are rolled out through the latent predictor and ranked
+by the distance between their predicted endpoints and the goal embedding.
 This simple interface supports goals specified after training and makes
 LeWM an effective local planner. However, it also ties the temporal
 reach of candidate evaluation to the action-conditioned rollout span.
@@ -152,8 +151,8 @@ temporal extension can consistently reproduce these gains.
 \section{Related Work}
 \label{sec:related}
 
-Reward-free visual goal reaching uses latent dynamics to evaluate
-image goals specified after training. PLDM learns these dynamics
+Learned latent dynamics can support planning toward image goals
+specified after training. PLDM learns these dynamics
 from offline trajectories~\citep{sobal2025rewardfree}, DINO-WM
 predicts pretrained visual features~\citep{zhou2025dinowm}, and
 LeWM jointly trains an encoder and action-conditioned
