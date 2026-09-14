@@ -66,9 +66,10 @@ default $25$-step planning span. For goals $50$ steps ahead, PushT
 success rises from $42.8\%$ to $67.8\%$; for goals $100$ steps ahead,
 TwoRoom success rises from $16.4\%$ to $70.4\%$. This long-range
 performance persists across three independently trained HAS models per
-task. A longer-span LeWM planner does not reproduce these gains,
-highlighting better evaluation of candidate actions---not simply longer
-CEM search---as the key to long-range control.
+task. The paired comparison fixes the LeWM checkpoint and CEM action
+horizon, isolating HAS's candidate re-scoring. A LeWM control with twice
+the action horizon still falls short of HAS beyond the default planning
+span.
 \end{abstract}
 
 \section{Introduction}
