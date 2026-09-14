@@ -54,26 +54,26 @@ Address \\
 LeWorldModel (LeWM) enables reward-free visual control by learning
 latent dynamics for goals specified after training. It ranks candidate
 action sequences by comparing fixed-span rollout endpoints with the
-visual goal. When the goal lies beyond this span, however, direct
-endpoint scoring can become temporally myopic and undervalue actions
-whose benefits emerge through later execution. We introduce
-Horizon-Aligned Scoring (HAS), which learns an action-free latent
-predictor from local transitions in LeWM's existing reward-free
-trajectories and applies it recursively to extend each action-conditioned
-endpoint to the goal's time scale before scoring. The recursion depth
-follows the remaining temporal gap and decreases during execution.
-Across three training seeds per task and
-ten paired evaluation seeds per trained model on PushT, TwoRoom, and
+visual goal. When the goal lies beyond this span, direct endpoint scoring
+can undervalue actions whose benefits emerge through later execution.
+We introduce Horizon-Aligned Scoring (HAS), which recursively extends
+each endpoint with an action-free latent predictor trained on LeWM's
+existing reward-free trajectories. The extension depth follows the
+remaining temporal gap and decreases during execution. In a paired,
+single-checkpoint evaluation over ten groups on PushT, TwoRoom, and
 Reacher, HAS improves mean success at every tested goal distance beyond
-LeWM's default $25$-step planning span, with particularly large gains
-for goals $50$ steps ahead in PushT and $100$ steps ahead in TwoRoom.
+LeWM's default $25$-step planning span: success rises from $42.8\%$ to
+$67.8\%$ for PushT goals $50$ steps ahead and from $16.4\%$ to $70.4\%$
+for TwoRoom goals $100$ steps ahead. Across three independently trained
+HAS models per task, every long-offset run mean exceeds the corresponding
+single-checkpoint LeWM reference; the three-run means are $68.47\%$ on
+PushT at $50$ steps and $72.33\%$ on TwoRoom at $100$ steps.
 HAS recovers the default LeWM scorer when no extension is needed and
-outperforms the evaluated $50$-step LeWM configuration at every longer
-goal distance. Fixed-depth comparisons show that no constant extension
+outperforms the evaluated $50$-step LeWM configuration at every tested
+goal offset. Fixed-depth comparisons show that no constant extension
 depth performs consistently across conditions. These results demonstrate
-that aligning the temporal reach of endpoint scoring with the goal
-horizon mitigates temporal myopia in goal-conditioned world-model
-planning.
+that aligning endpoint scoring with the goal horizon can mitigate
+temporal myopia in goal-conditioned world-model planning.
 \end{abstract}
 
 \section{Introduction}
@@ -139,15 +139,15 @@ a terminal-scoring problem in LeWM-based planning. Second, we introduce
 HAS, which learns an action-free latent predictor using only LeWM's
 existing training trajectories, applies it recursively to each candidate
 endpoint, and adapts the extension depth to the remaining temporal gap
-without lengthening the action-conditioned search. Third, experiments
-across three visual-control benchmarks spanning object manipulation,
-navigation, and reaching, with three training seeds per task and ten
-paired evaluation seeds per trained model, show that HAS improves mean
-success at every tested goal distance beyond LeWM's default planning
-span. Comparisons with a tested longer-span planner and fixed extension
-depths further show that neither simply increasing the action horizon
-nor applying a constant amount of temporal extension can consistently
-reproduce these gains.
+without lengthening the action-conditioned search. Third, a paired
+evaluation across three visual-control benchmarks spanning object
+manipulation, navigation, and reaching shows improved mean success at
+every tested goal distance beyond LeWM's default planning span.
+Additional HAS training runs preserve the observed advantage over the
+evaluated LeWM reference at these distances. Comparisons with a tested
+longer-span planner and fixed extension depths further show that neither
+simply increasing the action horizon nor applying a constant amount of
+temporal extension can consistently reproduce these gains.
 
 \section{Related Work}
 \label{sec:related}
@@ -417,8 +417,9 @@ improvement. PushT~\citep{florence2022ibc},
 TwoRoom~\citep{sobal2025rewardfree}, and
 Reacher~\citep{lewm2026} provide visual control settings involving
 object manipulation, navigation, and reaching.
-For each task, we use one epoch-$10$ checkpoint and compare
-the LeWM terminal score with HAS on the same world model.
+For the primary paired comparison, we use one epoch-$10$ checkpoint
+per task and compare the LeWM terminal score with HAS on the same
+world model.
 Ten evaluation groups, indexed by seeds $42$--$51$, contain
 $50$ episodes each. Methods share the sampled starts and
 goals within each task, offset, and group. Reported means and
@@ -573,18 +574,67 @@ identity (Section~\ref{sec:alignment}) corresponds to matching
 success in TwoRoom and Reacher and near-matching success in
 PushT ($87.2\%$ for LeWM and $87.0\%$ for HAS).
 
-% HAS_TRAIN_SEEDS_PENDING:
-% The author confirms 3 training seeds x 3 tasks, with BOTH official
-% (LeWM) and HAS evaluations at offsets 25/50/75/100 for every run.
-% Once complete results are supplied, aggregate evaluation groups within
-% each run/method, then report mean and sample SD (ddof=1) across runs.
-% Compute HAS-minus-official gains within matching training runs.
-% Replace tab:main with the paired three-training-seed comparison;
-% preserve its current three-way numbers in a separate H=50 control table.
-% Update Abstract, Introduction, protocol, main results, and Limitations.
-% Move the existing single-checkpoint fig:multiseed to the appendix.
-% Add a concise Robustness across training runs subsection and per-run
-% appendix table. No pending-result claims or placeholders in the PDF.
+\subsection{Consistency across HAS training runs}
+\label{sec:train-runs}
+
+We test whether the advantage over the evaluated LeWM reference persists
+when HAS is trained with different random seeds. For each task, three
+separately trained epoch-$10$ HAS checkpoints (seeds $3072$--$3074$)
+are evaluated at the same four goal offsets and on the same ten
+$50$-episode start-and-goal groups as Table~\ref{tab:main}.
+Each seed's success rate is averaged over the ten groups; the last
+column of Table~\ref{tab:train-runs} reports the mean and sample
+standard deviation of these three run means. The LeWM column is the
+fixed, single-checkpoint $H=25$ reference from Table~\ref{tab:main},
+not a separately trained baseline matched to each HAS seed.
+
+\begin{table}[!htbp]
+\caption{Success rates (\%) across HAS training runs. The LeWM reference
+uses one checkpoint and ten evaluation groups; each HAS seed uses its
+own checkpoint and the same ten groups. The final column reports
+mean $\pm$ sample standard deviation across the three HAS run means.
+The LeWM reference is not training-seed matched.}
+\label{tab:train-runs}
+\begin{center}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}llccccc@{}}
+\toprule
+Task & $o$ & LeWM ref. & \multicolumn{3}{c}{HAS training seed}
+  & HAS mean $\pm$ SD \\
+\cmidrule(lr){4-6}
+ & & & $3072$ & $3073$ & $3074$ & \\
+\midrule
+PushT & $25$  & $87.2$ & $87.4$ & $89.4$ & $83.2$ & $86.67\pm3.16$ \\
+      & $50$  & $42.8$ & $70.0$ & $70.0$ & $65.4$ & $68.47\pm2.66$ \\
+      & $75$  & $21.6$ & $40.0$ & $45.2$ & $44.2$ & $43.13\pm2.76$ \\
+      & $100$ & $13.2$ & $23.0$ & $30.2$ & $24.6$ & $25.93\pm3.78$ \\
+\midrule
+TwoRoom & $25$  & $84.4$ & $83.8$ & $83.4$ & $84.4$ & $83.87\pm0.50$ \\
+        & $50$  & $42.4$ & $81.0$ & $80.2$ & $78.6$ & $79.93\pm1.22$ \\
+        & $75$  & $25.8$ & $84.0$ & $77.2$ & $83.8$ & $81.67\pm3.87$ \\
+        & $100$ & $16.4$ & $75.0$ & $62.6$ & $79.4$ & $72.33\pm8.71$ \\
+\midrule
+Reacher & $25$  & $83.4$ & $84.8$ & $81.0$ & $84.0$ & $83.27\pm2.00$ \\
+        & $50$  & $92.6$ & $97.6$ & $97.2$ & $95.8$ & $96.87\pm0.95$ \\
+        & $75$  & $85.8$ & $96.2$ & $95.4$ & $95.6$ & $95.73\pm0.42$ \\
+        & $100$ & $81.0$ & $93.4$ & $90.2$ & $93.4$ & $92.33\pm1.85$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+\FloatBarrier
+
+At every offset beyond $H=25$, all three HAS runs exceed the fixed
+LeWM reference: $27$ of $27$ run-level comparisons are positive, with
+the smallest margin $3.2$ percentage points (Reacher, $o=50$).
+The between-run spread is largest for TwoRoom at $o=100$
+($72.33\pm8.71\%$), so the result indicates persistence of the
+observed advantage rather than uniform success rates. At $o=25$,
+HAS uses $k=0$, and the separately trained checkpoints give similar
+success rates without a systematic gain. Because the LeWM reference
+is fixed, this experiment does not establish training-seed-matched
+LeWM--HAS improvements.
 
 \subsection{How temporal extension changes scoring}
 \label{sec:score-analysis}
@@ -660,9 +710,10 @@ accumulate error or compress multiple possible continuations
 into an unhelpful representation. These issues are especially
 relevant to contact-rich control, as reflected in the
 remaining difficulty of long-offset PushT.
-The reported comparisons cover three simulated tasks with
-one training checkpoint per task; their ten evaluation groups
-measure variability in evaluation. The $H=50$ control examines
+The paired comparisons use one training checkpoint per task and
+ten evaluation groups. The three-seed analysis varies HAS training
+against a fixed LeWM reference, without matched LeWM training runs.
+The $H=50$ control examines
 one longer-span configuration, and further spans or compute
 budgets could change the relative performance.
 
@@ -748,8 +799,10 @@ precision, and global gradient clipping at norm $1.0$.
 The LeWM SIGReg coefficient is $0.09$. Both the step and recursive
 terms for $F$ have coefficient $1.0$, as does the complete
 $\mathcal{L}_F$ objective in the training loop.
-The reported comparisons use the epoch-$10$ checkpoint
-from one training run per task.
+The primary paired comparisons use the epoch-$10$ checkpoint
+from one training run per task; Section~\ref{sec:train-runs}
+additionally evaluates three independently trained HAS checkpoints
+per task.
 
 The checkpoint-producing implementation also includes a
 parameter-disjoint backward auxiliary head.
