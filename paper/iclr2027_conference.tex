@@ -62,9 +62,10 @@ this predictor needs no additional data; its recursion depth adapts to
 the remaining time to the goal. HAS thus changes how CEM evaluates
 actions without lengthening its action-conditioned search. Across PushT,
 TwoRoom, and Reacher, HAS improves mean success for goals beyond LeWM's
-default $25$-step planning span. For goals $50$ steps ahead, PushT
-success rises from $42.8\%$ to $67.8\%$; for goals $100$ steps ahead,
-TwoRoom success rises from $16.4\%$ to $70.4\%$. This long-range
+default planning span of $25$ environment steps. For goals $50$
+environment steps ahead, PushT success rises from $42.8\%$ to $67.8\%$;
+for goals $100$ environment steps ahead, TwoRoom success rises from
+$16.4\%$ to $70.4\%$. This long-range
 performance persists across three independently trained HAS models per
 task. The paired comparison fixes the LeWM checkpoint and CEM action
 horizon, isolating HAS's candidate re-scoring. A LeWM control with twice
