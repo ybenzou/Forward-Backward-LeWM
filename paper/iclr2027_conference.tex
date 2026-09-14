@@ -152,51 +152,36 @@ temporal extension can consistently reproduce these gains.
 \section{Related Work}
 \label{sec:related}
 
-Latent world models provide compact predictive interfaces for visual
-control~\citep{hafner2019planet,hafner2020dreamer,hansen2022tdmpc}.
-Reward-free goal reaching uses these interfaces to evaluate progress
-toward observations specified after training. PLDM learns latent
-dynamics from offline trajectories~\citep{sobal2025rewardfree};
-DINO-WM predicts pretrained visual features~\citep{zhou2025dinowm};
-and LeWM jointly trains the encoder and
-predictor~\citep{lewm2026}. Their use of latent prediction motivates
-the question of how its temporal coverage relates to the goals
-against which candidate actions are evaluated.
+Reward-free visual goal reaching uses latent dynamics to evaluate
+image goals specified after training. PLDM learns these dynamics
+from offline trajectories~\citep{sobal2025rewardfree}, DINO-WM
+predicts pretrained visual features~\citep{zhou2025dinowm}, and
+LeWM jointly trains an encoder and action-conditioned
+predictor~\citep{lewm2026}. HAS builds on LeWM's endpoint-based
+CEM planner.
 
-Longer-term coverage can be built into prediction and search.
-Variable-length world models condition predictions on action
-sequences of different durations~\citep{du2026vlwm}, while
-hierarchical world models use coarse predictions to guide
-local planning~\citep{zhang2026hwm}. Learned subgoals provide
-another temporal interface: FF-JEPA proposes successive
-subgoals with an action-free latent planner~\citep{masip2026ffjepa},
-and SAGE conditions action generation on predicted
-subgoals~\citep{cheng2026sage}. These approaches extend the
-futures available to the planner or guide its proposals.
-Evaluating the endpoint of an already generated candidate
-offers a complementary opportunity.
+Longer-range planning can extend prediction or structure search.
+Variable-length world models condition on action sequences of
+different durations~\citep{du2026vlwm}, and hierarchical world
+models use coarse predictions to guide local
+planning~\citep{zhang2026hwm}. Subgoal methods include FF-JEPA,
+which proposes successive subgoals with an action-free latent
+planner~\citep{masip2026ffjepa}, and SAGE, which conditions action
+generation on predicted subgoals~\citep{cheng2026sage}. These
+methods extend available futures or guide action proposals.
 
-The evaluation signal itself also benefits from planning-oriented
-structure. Temporal straightening regularizes latent trajectory
-curvature to improve distance geometry~\citep{wang2026straightening}.
+Planning-oriented objectives also shape endpoint evaluation.
+Temporal straightening improves latent distance geometry by
+regularizing trajectory curvature~\citep{wang2026straightening};
 RC-aux combines multi-horizon prediction with budget-conditioned
-reachability correction~\citep{li2026rcaux}. Traj-LeWM learns a
-goal-conditioned trajectory cost that complements endpoint
-distance~\citep{huang2026trajlewm}, while TRM learns a temporal
-pairwise cost for ranking predicted endpoints against
-goals~\citep{li2026trm}. These methods connect temporal,
-geometric, and path information with action selection.
-
-HAS instead focuses on the temporal representation supplied to the
-endpoint comparison. Its recursive action-free latent prediction is
-related to latent subgoal prediction~\citep{masip2026ffjepa}, while its
-use for ranking action-conditioned endpoints relates to
-planning-oriented costs~\citep{li2026trm,huang2026trajlewm}. Unlike
-methods that propose subgoals or learn a new comparison function, HAS
-applies a shared latent predictor after each candidate rollout, selects
-the recursion depth from the remaining gap to the goal, and retains
-Euclidean goal distance. This gives each short endpoint a longer-horizon
-scoring view without changing the CEM proposal or update rules.
+reachability correction~\citep{li2026rcaux}. Traj-LeWM supplements
+endpoint distance with a goal-conditioned trajectory
+cost~\citep{huang2026trajlewm}, and TRM learns a temporal pairwise
+cost for ranking endpoints against goals~\citep{li2026trm}.
+HAS instead advances each LeWM candidate endpoint with a shared
+action-free predictor, setting recursion depth from the remaining
+goal gap. It retains Euclidean goal distance and LeWM's CEM
+proposal and update rules.
 
 \section{Problem Setup}
 \label{sec:setup}
