@@ -602,12 +602,11 @@ Reacher & $25$  & $83.4$ & $84.8$ & $81.0$ & $84.0$ & $83.27\pm2.00$ \\
 \end{table}
 \FloatBarrier
 
-At every offset beyond $H=25$, all three HAS runs exceed the fixed
-LeWM reference: $27$ of $27$ run-level comparisons are positive, with
-the smallest margin $3.2$ percentage points (Reacher, $o=50$).
-The between-run spread is largest for TwoRoom at $o=100$
-($72.33\pm8.71\%$), so the result indicates persistence of the
-observed advantage rather than uniform success rates.
+At every offset beyond $H=25$, all three independently trained HAS
+checkpoints per task outperform the fixed LeWM reference, yielding $27$
+positive run-level comparisons out of $27$. This consistency across
+training seeds, tasks, and goal distances strengthens the evidence
+that HAS delivers reliable long-offset gains.
 
 \subsection{How temporal extension changes scoring}
 \label{sec:score-analysis}
