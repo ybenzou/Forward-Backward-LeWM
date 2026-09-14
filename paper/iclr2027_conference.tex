@@ -691,18 +691,17 @@ methods.
 \section{Conclusion}
 \label{sec:concl}
 
-LeWM's action-conditioned rollout span need not set the time scale
-at which candidate actions are evaluated. HAS extends short-rollout
-endpoints through an action-free latent predictor trained on the same
-trajectories, adapting scoring depth to the remaining goal offset
-while keeping the CEM action horizon unchanged. Across PushT,
-TwoRoom, and Reacher, this separation improves long-offset success
-and outperforms the evaluated longer-span LeWM control beyond the
-default planning span. Fixed-depth ablations support adapting the
-extension during execution, while paired trajectories illustrate
-preparatory actions that short-rollout endpoint scoring can overlook.
-These findings establish scoring depth as a distinct design choice
-for LeWM-based goal reaching.
+Long-offset goal reaching benefits from recognizing actions that
+prepare the state for later progress. HAS extends LeWM's candidate
+endpoints with an adaptive action-free latent predictor trained on
+LeWM's existing trajectories, while retaining the original CEM
+action horizon. Across PushT, TwoRoom, and Reacher, HAS improves
+long-offset success and outperforms the evaluated longer-span LeWM
+control. Fixed-depth ablations support the adaptive scoring schedule,
+and paired trajectories illustrate preparatory moves followed by
+goal progress. Together, these results show how valuing the delayed
+contribution of near-term actions strengthens long-range goal reaching
+with LeWM.
 
 \subsection*{AI use statement}
 
