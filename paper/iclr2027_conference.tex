@@ -641,17 +641,21 @@ Appendix~\ref{app:analysis} details the sampling protocol.
 \subsection{Planning behavior}
 \label{sec:analysis}
 
-Useful short-term actions can first establish intermediate
-progress before the goal configuration becomes locally
-attainable. The paired executions in
-Figure~\ref{fig:process} illustrate this distinction.
-In TwoRoom, the HAS trajectory advances toward and through
-the passage, while the LeWM trajectory remains on the
-starting side. In PushT, the HAS sequence first changes the
-pusher's position and subsequently brings the object toward
-the target configuration. These trajectories connect the
-scoring perspective to control behavior: candidate endpoints
-can be valuable because of the progress that follows them.
+The paired executions in Figure~\ref{fig:process} show how useful
+actions may first prepare the state before producing visible goal
+progress. In PushT, LeWM contacts the T-shaped object within the
+first action block and rotates it past the target orientation by
+about step $30$; subsequent motion does not recover the goal pose.
+HAS instead repositions the pusher around the object through roughly
+step $35$, with little change in the object's pose, then aligns the
+object with the goal between steps $35$ and $55$. In TwoRoom, LeWM
+moves downward along the starting side and remains near the lower
+boundary, while HAS follows a preparatory route and approaches the
+goal between steps $25$ and $60$. These examples illustrate why
+directly scoring a short-rollout endpoint against a distant goal
+can miss preparatory actions: their payoff appears only after later
+actions. HAS's temporally extended endpoint score can favor such
+actions without lengthening the action-conditioned search.
 
 \begin{figure}[!htbp]
 \centering
