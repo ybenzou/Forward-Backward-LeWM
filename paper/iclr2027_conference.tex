@@ -627,16 +627,17 @@ temporal extension for $400$ evaluation-disjoint windows per task
 \end{figure}
 \FloatBarrier
 
-The extended representations generally occupy a lower
-endpoint-to-goal distance range (Figure~\ref{fig:score}).
-This pattern shows how locally learned evolution can bridge part
-of the representational gap between an intermediate state and
-a later goal. In PushT, the direct and extended distributions
-overlap more at the longest offset, consistent with the greater
-difficulty of recursive extension in this setting.
-The diagnostic exposes the transformation of observed endpoint
-distances, while closed-loop comparisons establish the control
-benefit. Appendix~\ref{app:analysis} gives the sampling protocol.
+For the same held-out endpoint--goal pairs, gap-matched extension
+shifts latent distances toward smaller values across all three
+tasks and offsets (Figure~\ref{fig:score}). In several settings,
+it also spreads distances that cluster near a high-distance mode
+under direct endpoint comparison, exposing more variation among
+these endpoint--goal pairs. Together, the shift and broader spread show
+how local latent evolution can provide a later-time representation
+of a short-span endpoint for scoring. The paired control gains in
+Table~\ref{tab:main} and depth comparison in Table~\ref{tab:k-depth}
+show the control relevance of this scoring view.
+Appendix~\ref{app:analysis} details the sampling protocol.
 
 \subsection{Planning behavior}
 \label{sec:analysis}
