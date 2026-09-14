@@ -691,19 +691,18 @@ methods.
 \section{Conclusion}
 \label{sec:concl}
 
-The time scale of candidate evaluation matters when a visual
-world model plans toward goals beyond its prediction span.
-HAS gives short action-conditioned endpoints a longer scoring
-view through a locally trained action-free latent predictor and a
-remaining-gap recursion rule. Across PushT, TwoRoom, and
-Reacher, this design improves long-offset goal reaching and
-exceeds the evaluated longer-span LeWM configuration.
-The depth comparison further demonstrates the value of
-adapting the extension during execution.
-Together, these findings identify temporal extension at the
-scoring interface as a useful way to connect local predictive
-models with longer-horizon control, and motivate treating
-scoring depth as an explicit component of world-model planning.
+LeWM's action-conditioned rollout span need not set the time scale
+at which candidate actions are evaluated. HAS extends short-rollout
+endpoints through an action-free latent predictor trained on the same
+trajectories, adapting scoring depth to the remaining goal offset
+while keeping the CEM action horizon unchanged. Across PushT,
+TwoRoom, and Reacher, this separation improves long-offset success
+and outperforms the evaluated longer-span LeWM control beyond the
+default planning span. Fixed-depth ablations support adapting the
+extension during execution, while paired trajectories illustrate
+preparatory actions that short-rollout endpoint scoring can overlook.
+These findings establish scoring depth as a distinct design choice
+for LeWM-based goal reaching.
 
 \subsection*{AI use statement}
 
