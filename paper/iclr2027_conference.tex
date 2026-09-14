@@ -52,28 +52,25 @@ Address \\
 
 \begin{abstract}
 LeWorldModel (LeWM) enables reward-free visual control by learning
-latent dynamics for goals specified after training. It ranks candidate
-action sequences by comparing fixed-span rollout endpoints with the
-visual goal. When the goal lies beyond this span, direct endpoint scoring
-can undervalue actions whose benefits emerge through later execution.
-We introduce Horizon-Aligned Scoring (HAS), which recursively extends
-each endpoint with an action-free latent predictor trained on LeWM's
-existing reward-free trajectories. The extension depth follows the
-remaining temporal gap and decreases during execution. In a paired,
-single-checkpoint evaluation over ten groups on PushT, TwoRoom, and
-Reacher, HAS improves mean success at every tested goal distance beyond
-LeWM's default $25$-step planning span: success rises from $42.8\%$ to
-$67.8\%$ for PushT goals $50$ steps ahead and from $16.4\%$ to $70.4\%$
-for TwoRoom goals $100$ steps ahead. Across three independently trained
-HAS models per task, every long-offset run mean exceeds the corresponding
-single-checkpoint LeWM reference; the three-run means are $68.47\%$ on
-PushT at $50$ steps and $72.33\%$ on TwoRoom at $100$ steps.
-HAS recovers the default LeWM scorer when no extension is needed and
-outperforms the evaluated $50$-step LeWM configuration at every tested
-goal offset. Fixed-depth comparisons show that no constant extension
-depth performs consistently across conditions. These results demonstrate
-that aligning endpoint scoring with the goal horizon can mitigate
-temporal myopia in goal-conditioned world-model planning.
+latent dynamics for goals specified after training. It scores candidate
+action sequences using fixed-span latent rollouts, which can overlook
+actions whose benefits emerge beyond the planning span. We introduce
+Horizon-Aligned Scoring (HAS), which recursively extends each rollout
+endpoint using an action-free latent predictor trained on LeWM's existing
+reward-free trajectories. The extension depth follows the remaining
+temporal gap and decreases during execution. In a paired evaluation on
+PushT, TwoRoom, and Reacher, HAS improves mean success at every tested
+goal offset beyond LeWM's default $25$-step planning span. PushT success
+at offset $50$ rises from $42.8\%$ to $67.8\%$, and TwoRoom success at
+offset $100$ from $16.4\%$ to $70.4\%$. Across three independent HAS
+training runs per task, success at offset $50$ is
+$(68.5\pm2.7)\%$, $(79.9\pm1.2)\%$, and $(96.9\pm1.0)\%$ on the
+three tasks, respectively (mean $\pm$ standard deviation). HAS also
+exceeds the evaluated $50$-step LeWM planner at
+every offset, while fixed-depth ablations show the value of adapting
+the extension during execution. Aligning scoring depth with goal horizon
+thus improves long-offset control without lengthening action-conditioned
+planning.
 \end{abstract}
 
 \section{Introduction}
