@@ -533,7 +533,8 @@ reduction as the controller approaches the goal horizon.
 groups) under different recursion-depth schedules. HAS uses the
 remaining-gap rule; fixed $k$ is reapplied at every replan.
 The world-model checkpoint, starts, and CEM configuration
-are shared within each task and evaluation group.}
+are shared within each task and evaluation group. Bold marks
+the highest mean in each row.}
 \label{tab:k-depth}
 {\small
 \input{tables/tab_k_depth_multiseed.tex}
@@ -551,14 +552,6 @@ adapting its depth during execution is an important part of
 the scoring design. The fixed-depth results also make clear
 that applying more recursive prediction steps need not improve
 control.
-
-The exception is TwoRoom at $o=100$: fixed $k=5$ achieves
-$76.2\%$, compared with $70.4\%$ for HAS. The preferred depth
-can thus be task-dependent, with the remaining-gap rule providing
-a strong cross-condition default. At $o=25$, the $k=0$ cost
-identity (Section~\ref{sec:alignment}) corresponds to matching
-success in TwoRoom and Reacher and near-matching success in
-PushT ($87.2\%$ for LeWM and $87.0\%$ for HAS).
 
 \subsection{Consistency across HAS training runs}
 \label{sec:train-runs}
