@@ -159,28 +159,30 @@ LeWM jointly trains an encoder and action-conditioned
 predictor~\citep{lewm2026}. HAS builds on LeWM's endpoint-based
 CEM planner.
 
-Longer-range planning can extend prediction or structure search.
-Variable-length world models condition on action sequences of
-different durations~\citep{du2026vlwm}, and hierarchical world
-models use coarse predictions to guide local
-planning~\citep{zhang2026hwm}. Subgoal methods include FF-JEPA,
-which proposes successive subgoals with an action-free latent
-planner~\citep{masip2026ffjepa}, and SAGE, which conditions action
-generation on predicted subgoals~\citep{cheng2026sage}. These
-methods extend available futures or guide action proposals.
+Longer-range planning can extend predictions or guide action
+proposals. Variable-length world models predict over different
+action durations~\citep{du2026vlwm}, and hierarchical models use
+coarse predictions to guide local planning~\citep{zhang2026hwm}.
+FF-JEPA proposes subgoals through action-free latent
+prediction~\citep{masip2026ffjepa}, while SAGE conditions action
+generation on predicted subgoals~\citep{cheng2026sage}. HAS uses
+action-free prediction after the short action-conditioned rollout
+to rescore CEM candidates, without lengthening their action span or
+generating subgoals.
 
-Planning-oriented objectives also shape endpoint evaluation.
-Temporal straightening improves latent distance geometry by
-regularizing trajectory curvature~\citep{wang2026straightening};
-RC-aux combines multi-horizon prediction with budget-conditioned
-reachability correction~\citep{li2026rcaux}. Traj-LeWM supplements
-endpoint distance with a goal-conditioned trajectory
-cost~\citep{huang2026trajlewm}, and TRM learns a temporal pairwise
-cost for ranking endpoints against goals~\citep{li2026trm}.
-HAS instead advances each LeWM candidate endpoint with a shared
-action-free predictor, setting recursion depth from the remaining
-goal gap. It retains Euclidean goal distance and LeWM's CEM
-proposal and update rules.
+Other work changes how predicted futures are compared with goals.
+Temporal straightening regularizes trajectory curvature to shape
+latent distance~\citep{wang2026straightening}, and RC-aux adds
+multi-horizon prediction and budget-conditioned reachability
+correction~\citep{li2026rcaux}. Traj-LeWM adds a goal-conditioned
+trajectory cost to endpoint distance~\citep{huang2026trajlewm},
+while TRM learns a temporal pairwise cost for endpoint
+ranking~\citep{li2026trm}. HAS also targets candidate evaluation,
+but retains LeWM's Euclidean goal distance and CEM proposal and
+update rules. It instead scores endpoints after an action-free
+extension whose depth tracks the remaining goal gap: the changed
+design choice is the scored endpoint's temporal position, not the
+goal metric.
 
 \section{Problem Setup}
 \label{sec:setup}
