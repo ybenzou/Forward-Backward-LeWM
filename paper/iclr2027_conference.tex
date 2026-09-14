@@ -679,12 +679,11 @@ accumulate error or compress multiple possible continuations
 into an unhelpful representation. These issues are especially
 relevant to contact-rich control, as reflected in the
 remaining difficulty of long-offset PushT.
-The paired comparisons use one training checkpoint per task and
-ten evaluation groups. The three-seed analysis varies HAS training
-against a fixed LeWM reference, without matched LeWM training runs.
-The $H=50$ control examines
-one longer-span configuration, and further spans or compute
-budgets could change the relative performance.
+Although the benchmarks span manipulation, navigation, and reaching,
+each uses a low-dimensional action space. Future work should test HAS
+in more complex environments with higher-dimensional control and
+compare it directly with related long-horizon planning and scoring
+methods.
 
 \section{Conclusion}
 \label{sec:concl}
